@@ -3,6 +3,7 @@ import type { Card } from "./lib/cards";
 import { cardDisplayKey, getRankLabel, getSuitColorClass, getSuitSymbol } from "./lib/cardDisplay";
 import { decideCpuAction } from "./lib/cpu";
 import { getCpuActionDelay, sleep } from "./lib/cpuTiming";
+import { getSeatPosition, shouldShowHoleCards } from "./lib/tablePresentation";
 import {
   applyPlayerAction,
   BIG_BLIND,
@@ -459,7 +460,7 @@ function CpuSummarySeat({
     isThinking ? "thinking" : "",
     `status-${player.status.toLowerCase().replace("-", "")}`,
   ].filter(Boolean).join(" ");
-  const showCards = reveal && player.status !== "Eliminated";
+  const showCards = (reveal || player.status === "Eliminated") && shouldShowHoleCards(player, game);
 
   return (
     <article className={className}>
@@ -480,7 +481,7 @@ function CpuSummarySeat({
       {showCards && (
         <div className="cards cpuSummaryCards">
           {player.holeCards.map((card, cardIndex) => (
-            <CardView key={`${cardDisplayKey(card)}-${cardIndex}`} card={card} muted={player.status === "Folded"} />
+            <CardView key={`${cardDisplayKey(card)}-${cardIndex}`} card={card} faceDown={!reveal} muted={player.status === "Folded"} />
           ))}
         </div>
       )}
@@ -559,13 +560,14 @@ function PlayerSeat({
   const seatClass = [
     "player",
     `seat-${index}`,
+    `seat-${getSeatPosition(index)}`,
     player.isHuman ? "human" : "",
     reveal ? "cards-revealed" : "",
     isCurrent ? "current" : "",
     isThinking ? "thinking" : "",
     `status-${player.status.toLowerCase().replace("-", "")}`,
   ].filter(Boolean).join(" ");
-  const showCards = player.status !== "Eliminated";
+  const showCards = shouldShowHoleCards(player, game);
 
   return (
     <article className={seatClass}>
