@@ -142,6 +142,7 @@ h3 {
   flex-wrap: wrap;
   gap: 8px;
   justify-content: center;
+  min-height: 32px;
 }
 
 .revealNotice {
@@ -152,6 +153,7 @@ h3 {
   color: #17201a;
   font-weight: 900;
   padding: 5px 10px;
+  white-space: nowrap;
 }
 
 .boardCards {
@@ -160,27 +162,40 @@ h3 {
 }
 
 .potDisplay {
+  --pot-row-gap: 5px;
+  --pot-row-height: 30px;
+  align-content: start;
   display: grid;
-  gap: 5px;
+  gap: var(--pot-row-gap);
+  height: calc((var(--pot-row-height) * 3) + (var(--pot-row-gap) * 2));
   max-width: 560px;
+  overflow-y: auto;
   width: 100%;
 }
 
-.potDisplay div {
+.potRow {
   align-items: center;
   background: rgba(255, 253, 247, 0.15);
   border: 1px solid rgba(255, 253, 247, 0.34);
   border-radius: 8px;
-  display: flex;
-  flex-wrap: wrap;
+  box-sizing: border-box;
+  display: grid;
   font-size: 13px;
   gap: 6px;
-  justify-content: center;
+  grid-template-columns: auto minmax(0, 1fr);
+  height: var(--pot-row-height);
   padding: 5px 8px;
 }
 
-.potDisplay span {
+.potEligible {
   color: #edf4ee;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.potAmount {
+  white-space: nowrap;
 }
 
 .player {
@@ -488,7 +503,12 @@ dd {
 .handName {
   color: #2e7355;
   font-weight: 900;
+  line-height: 1.2;
   margin-top: 6px;
+  min-height: 1.2em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .controls,
@@ -946,6 +966,7 @@ dd {
 
   .boardHeader {
     gap: 6px;
+    min-height: 30px;
   }
 
   .cards {
@@ -957,10 +978,11 @@ dd {
   }
 
   .potDisplay {
-    gap: 4px;
+    --pot-row-gap: 4px;
+    --pot-row-height: 29px;
   }
 
-  .potDisplay div {
+  .potRow {
     font-size: 12px;
     gap: 5px;
     padding: 6px 8px;

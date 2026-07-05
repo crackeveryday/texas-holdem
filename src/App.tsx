@@ -508,12 +508,16 @@ function PotDisplay({ game }: { game: GameState }) {
 
   return (
     <div className="potDisplay">
-      {pots.map((pot, index) => (
-        <div key={`${index}-${pot.amount}`}>
-          <strong>{index === 0 ? "Main Pot" : `Side Pot ${index}`}: {pot.amount}</strong>
-          <span>eligible: {pot.eligiblePlayerIds.map((id) => game.players.find((player) => player.id === id)?.name ?? id).join(", ") || "none"}</span>
-        </div>
-      ))}
+      {pots.map((pot, index) => {
+        const eligibleNames = pot.eligiblePlayerIds.map((id) => game.players.find((player) => player.id === id)?.name ?? id).join(", ") || "none";
+
+        return (
+          <div className="potRow" key={`${index}-${pot.amount}`}>
+            <strong className="potAmount">{index === 0 ? "Main Pot" : `Side Pot ${index}`}: {pot.amount}</strong>
+            <span className="potEligible" title={eligibleNames}>eligible: {eligibleNames}</span>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -590,7 +594,7 @@ function PlayerSeat({
           <dd>{player.status}</dd>
         </div>
       </dl>
-      {evaluation && <p className="handName">{evaluation.name}</p>}
+      <p className="handName" aria-hidden={!evaluation}>{evaluation?.name ?? ""}</p>
     </article>
   );
 }
