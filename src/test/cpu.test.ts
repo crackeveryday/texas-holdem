@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { parseCard } from "../lib/cards";
 import { decideCpuAction, evaluatePostflopHand, evaluatePreflopHand } from "../lib/cpu";
-import { createInitialGame, MAX_RAISES_PER_ROUND, type GameState } from "../lib/game";
+import { BIG_BLIND, createInitialGame, MAX_RAISES_PER_ROUND, type GameState } from "../lib/game";
 
 const c = (cards: string) => cards.split(" ").map(parseCard);
 
@@ -85,6 +85,18 @@ describe("CPU action selection", () => {
       { currentBet: 0 },
       {
         1: { holeCards: c("7C 2D"), roundBet: 0, committed: 0 },
+      },
+    );
+    const action = decideCpuAction(state, 1, () => 0.2);
+    expect(action.type).toBe("check");
+    expect(action.type).not.toBe("fold");
+  });
+
+  it("does not fold weak hands when already matched to the current bet", () => {
+    const state = cpuTurn(
+      { currentBet: BIG_BLIND },
+      {
+        1: { holeCards: c("7C 2D"), roundBet: BIG_BLIND, committed: BIG_BLIND },
       },
     );
     const action = decideCpuAction(state, 1, () => 0.2);

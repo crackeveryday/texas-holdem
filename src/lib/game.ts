@@ -158,19 +158,19 @@ export function getLegalActions(state: GameState, playerIndex: number): GameActi
   const player = state.players[playerIndex];
   if (!isActionable(player) || state.currentPlayerIndex !== playerIndex) return [];
 
-  const toCall = Math.max(0, state.currentBet - player.roundBet);
+  const callAmount = Math.max(0, state.currentBet - player.roundBet);
   const actions: GameAction[] = [];
   const maxRaiseTo = getMaxRaiseTo(player);
   if (state.currentBet === 0) {
     actions.push({ type: "check" });
     if (player.chips > 0) actions.push({ type: "bet" });
   } else {
-    if (toCall === 0) actions.push({ type: "check" });
+    if (callAmount === 0) actions.push({ type: "check" });
     else actions.push({ type: "call" });
     if (maxRaiseTo > state.currentBet) actions.push({ type: "raise" });
   }
   if (player.chips > 0) actions.push({ type: "all-in" });
-  actions.push({ type: "fold" });
+  if (callAmount > 0) actions.push({ type: "fold" });
   return dedupeActions(actions);
 }
 
@@ -188,6 +188,7 @@ export function applyPlayerAction(state: GameState, playerIndex: number, action:
   const toCall = Math.max(0, currentBet - player.roundBet);
   const previousPots = state.pots;
   if (action.type === "fold") {
+    if (toCall <= 0) return state;
     player.status = "Folded";
     player.acted = true;
     logs.unshift(`${player.name} folds.`);

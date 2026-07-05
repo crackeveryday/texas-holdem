@@ -179,7 +179,15 @@ function ensureLegal(preferred: GameAction, legal: GameAction[]): GameAction {
   if (exact) return preferred;
   const sameType = legal.find((action) => action.type === preferred.type);
   if (sameType) return preferred.amount === undefined ? sameType : preferred;
-  return legal.find((action) => action.type === "check") ?? legal.find((action) => action.type === "call") ?? legal.find((action) => action.type === "fold") ?? { type: "fold" };
+  return (
+    legal.find((action) => action.type === "check") ??
+    legal.find((action) => action.type === "call") ??
+    legal.find((action) => action.type === "all-in") ??
+    legal.find((action) => action.type === "bet") ??
+    legal.find((action) => action.type === "raise") ??
+    legal.find((action) => action.type === "fold") ??
+    { type: "check" }
+  );
 }
 
 function canAggress(actions: GameAction[]): boolean {

@@ -23,11 +23,47 @@ function forceHumanTurn(state: GameState): GameState {
   };
 }
 
+function forceHumanTurnAtBet(state: GameState, currentBet: number, humanRoundBet: number): GameState {
+  const players = state.players.map((player, index) => ({
+    ...player,
+    acted: index === 0 ? false : true,
+    roundBet: index === 0 ? humanRoundBet : currentBet,
+    committed: index === 0 ? humanRoundBet : currentBet,
+  }));
+  const pots = calculatePots(players);
+  return {
+    ...state,
+    currentPlayerIndex: 0,
+    currentBet,
+    players,
+    pot: pots.reduce((total, pot) => total + pot.amount, 0),
+    pots,
+  };
+}
+
 function totalChips(state: GameState): number {
   return state.players.reduce((total, player) => total + player.chips + player.committed, 0);
 }
 
 describe("game betting", () => {
+  it("does not list fold when nobody has bet", () => {
+    const state = forceHumanTurnAtBet(createInitialGame(), 0, 0);
+    const actions = getLegalActions(state, 0).map((action) => action.type);
+    expect(actions).toContain("check");
+    expect(actions).toContain("bet");
+    expect(actions).toContain("all-in");
+    expect(actions).not.toContain("fold");
+  });
+
+  it("does not list fold when the big blind has no additional call", () => {
+    const state = forceHumanTurnAtBet(createInitialGame(), BIG_BLIND, BIG_BLIND);
+    const actions = getLegalActions(state, 0).map((action) => action.type);
+    expect(actions).toContain("check");
+    expect(actions).toContain("raise");
+    expect(actions).toContain("all-in");
+    expect(actions).not.toContain("fold");
+  });
+
   it("lists call, raise, all-in, and fold when facing a bet", () => {
     const state = forceHumanTurn(createInitialGame());
     const actions = getLegalActions(state, 0).map((action) => action.type);
@@ -35,6 +71,14 @@ describe("game betting", () => {
     expect(actions).toContain("raise");
     expect(actions).toContain("all-in");
     expect(actions).toContain("fold");
+    expect(actions).not.toContain("check");
+  });
+
+  it("ignores direct fold actions when checking is available", () => {
+    const state = forceHumanTurnAtBet(createInitialGame(), 0, 0);
+    const next = applyPlayerAction(state, 0, { type: "fold" });
+    expect(next).toBe(state);
+    expect(next.players[0].status).not.toBe("Folded");
   });
 
   it("commits chips on call", () => {
