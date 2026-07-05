@@ -37,7 +37,7 @@ button:disabled {
 .app {
   margin: 0 auto;
   max-width: 1280px;
-  padding: 24px;
+  padding: 18px;
 }
 
 .topbar {
@@ -45,7 +45,7 @@ button:disabled {
   display: flex;
   gap: 24px;
   justify-content: space-between;
-  margin-bottom: 20px;
+  margin-bottom: 14px;
 }
 
 h1,
@@ -56,7 +56,7 @@ p {
 }
 
 h1 {
-  font-size: 32px;
+  font-size: 30px;
 }
 
 h2 {
@@ -85,6 +85,13 @@ h3 {
   padding: 6px 10px;
 }
 
+.playLayout {
+  align-items: start;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 360px);
+}
+
 .table {
   background:
     linear-gradient(135deg, rgba(255, 253, 247, 0.1), transparent 36%),
@@ -93,31 +100,31 @@ h3 {
   border-radius: 28px;
   box-shadow: 0 18px 50px rgba(43, 31, 22, 0.22);
   color: #fffdf7;
-  padding: 14px;
+  padding: 6px;
 }
 
 .tableFelt {
   background:
     radial-gradient(ellipse at center, rgba(255, 253, 247, 0.16), transparent 54%),
     radial-gradient(ellipse at center, #347653 0%, #286246 58%, #1f4f3a 100%);
-  border: 7px solid #7a5134;
+  border: 5px solid #7a5134;
   border-radius: 22px;
   display: grid;
-  gap: 14px;
+  gap: 8px;
   grid-template-areas:
-    ". cpu1 cpu2 cpu3 ."
-    "cpu4 center center center ."
-    ". human human human .";
-  grid-template-columns: 1fr minmax(150px, 190px) minmax(150px, 190px) minmax(150px, 190px) 1fr;
-  min-height: 640px;
-  padding: 18px;
+    "cpu1 cpu2 cpu3 cpu4"
+    "cpu1 center center cpu4"
+    ". human human .";
+  grid-template-columns: repeat(4, minmax(124px, 166px));
+  min-height: 460px;
+  padding: 10px;
   position: relative;
 }
 
 .tableCenter {
   align-self: center;
   display: grid;
-  gap: 12px;
+  gap: 8px;
   grid-area: center;
   justify-items: center;
 }
@@ -126,15 +133,16 @@ h3 {
   align-items: center;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
 }
 
 .boardHeader {
   align-items: center;
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 8px;
   justify-content: center;
+  min-height: 32px;
 }
 
 .revealNotice {
@@ -144,35 +152,50 @@ h3 {
   border-radius: 999px;
   color: #17201a;
   font-weight: 900;
-  padding: 6px 12px;
+  padding: 5px 10px;
+  white-space: nowrap;
 }
 
 .boardCards {
   justify-content: center;
-  min-height: 114px;
+  min-height: 84px;
 }
 
 .potDisplay {
+  --pot-row-gap: 5px;
+  --pot-row-height: 30px;
+  align-content: start;
   display: grid;
-  gap: 6px;
-  max-width: 760px;
+  gap: var(--pot-row-gap);
+  height: calc((var(--pot-row-height) * 3) + (var(--pot-row-gap) * 2));
+  max-width: 560px;
+  overflow-y: auto;
   width: 100%;
 }
 
-.potDisplay div {
+.potRow {
   align-items: center;
   background: rgba(255, 253, 247, 0.15);
   border: 1px solid rgba(255, 253, 247, 0.34);
   border-radius: 8px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  justify-content: center;
-  padding: 8px 10px;
+  box-sizing: border-box;
+  display: grid;
+  font-size: 13px;
+  gap: 6px;
+  grid-template-columns: auto minmax(0, 1fr);
+  height: var(--pot-row-height);
+  padding: 5px 8px;
 }
 
-.potDisplay span {
+.potEligible {
   color: #edf4ee;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.potAmount {
+  white-space: nowrap;
 }
 
 .player {
@@ -183,7 +206,7 @@ h3 {
   box-shadow: 0 10px 24px rgba(12, 23, 17, 0.2);
   color: #17201a;
   min-width: 0;
-  padding: 12px;
+  padding: 8px;
   position: relative;
   transition:
     border-color 180ms ease,
@@ -194,22 +217,22 @@ h3 {
 .seat-0 {
   grid-area: human;
   justify-self: center;
-  width: min(420px, 100%);
+  width: min(360px, 100%);
 }
 
-.seat-1 {
+.seat-left {
   grid-area: cpu1;
 }
 
-.seat-2 {
+.seat-top-left {
   grid-area: cpu2;
 }
 
-.seat-3 {
+.seat-top-right {
   grid-area: cpu3;
 }
 
-.seat-4 {
+.seat-right {
   grid-area: cpu4;
   justify-self: stretch;
 }
@@ -232,8 +255,8 @@ h3 {
   content: "";
   height: 10px;
   position: absolute;
-  right: 12px;
-  top: 12px;
+  right: 9px;
+  top: 9px;
   width: 10px;
 }
 
@@ -256,14 +279,7 @@ h3 {
   display: flex;
   gap: 8px;
   justify-content: space-between;
-  margin-bottom: 8px;
-}
-
-.thinkingText {
-  color: #9a6a00;
-  font-size: 12px;
-  font-weight: 800;
-  margin-top: 2px;
+  margin-bottom: 6px;
 }
 
 .badges {
@@ -278,13 +294,13 @@ h3 {
   font-size: 12px;
   font-weight: 900;
   min-width: 32px;
-  padding: 5px 8px;
+  padding: 4px 7px;
   text-align: center;
 }
 
 .playerStatusRow {
   display: flex;
-  margin-bottom: 10px;
+  margin-bottom: 7px;
 }
 
 .statusBadge {
@@ -292,7 +308,8 @@ h3 {
   font-size: 11px;
   font-weight: 900;
   letter-spacing: 0;
-  padding: 5px 8px;
+  padding: 4px 7px;
+  white-space: nowrap;
 }
 
 .statusActive {
@@ -321,7 +338,7 @@ h3 {
 }
 
 .holeCards {
-  min-height: 86px;
+  min-height: 64px;
 }
 
 .noCards {
@@ -332,9 +349,9 @@ h3 {
   display: inline-flex;
   font-size: 12px;
   font-weight: 800;
-  height: 82px;
+  height: 60px;
   justify-content: center;
-  width: 116px;
+  width: 86px;
 }
 
 .card {
@@ -342,16 +359,16 @@ h3 {
   border-radius: 8px;
   display: inline-flex;
   flex: 0 0 auto;
-  height: 102px;
+  height: 78px;
   justify-content: center;
   overflow: hidden;
   position: relative;
-  width: 73px;
+  width: 56px;
 }
 
 .holeCards .card {
-  height: 82px;
-  width: 58px;
+  height: 60px;
+  width: 43px;
 }
 
 .card.face {
@@ -387,10 +404,10 @@ h3 {
   border-radius: 999px;
   color: rgba(255, 253, 247, 0.86);
   display: inline-grid;
-  font-size: 22px;
-  height: 38px;
+  font-size: 17px;
+  height: 28px;
   place-items: center;
-  width: 38px;
+  width: 28px;
 }
 
 .card.muted {
@@ -408,29 +425,29 @@ h3 {
 .card-corner {
   align-items: center;
   display: flex;
-  font-size: 14px;
+  font-size: 12px;
   gap: 0;
   line-height: 1;
   position: absolute;
 }
 
 .card-corner.top-left {
-  left: 7px;
-  top: 6px;
+  left: 6px;
+  top: 5px;
 }
 
 .card-corner.bottom-right {
-  bottom: 6px;
-  right: 7px;
+  bottom: 5px;
+  right: 6px;
   transform: rotate(180deg);
 }
 
 .card-corner strong {
-  font-size: 18px;
+  font-size: 15px;
 }
 
 .holeCards .card-corner {
-  font-size: 11px;
+  font-size: 9px;
 }
 
 .holeCards .card-corner.top-left {
@@ -444,17 +461,17 @@ h3 {
 }
 
 .holeCards .card-corner strong {
-  font-size: 15px;
+  font-size: 12px;
 }
 
 .card-center-suit {
   align-self: center;
-  font-size: 42px;
+  font-size: 31px;
   line-height: 1;
 }
 
 .holeCards .card-center-suit {
-  font-size: 31px;
+  font-size: 23px;
 }
 
 .card-revealed {
@@ -463,9 +480,9 @@ h3 {
 
 dl {
   display: grid;
-  gap: 5px;
+  gap: 4px;
   grid-template-columns: 1fr;
-  margin: 10px 0 0;
+  margin: 7px 0 0;
 }
 
 dl div {
@@ -486,7 +503,12 @@ dd {
 .handName {
   color: #2e7355;
   font-weight: 900;
-  margin-top: 8px;
+  line-height: 1.2;
+  margin-top: 6px;
+  min-height: 1.2em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .controls,
@@ -494,37 +516,207 @@ dd {
   background: #fffdf7;
   border: 1px solid #d2cab8;
   border-radius: 8px;
-  margin-top: 16px;
-  padding: 16px;
+  padding: 12px;
 }
 
 .controls {
-  align-items: center;
+  align-items: stretch;
   display: flex;
-  gap: 24px;
+  flex-direction: column;
+  gap: 12px;
+  justify-content: flex-start;
+  margin-top: 0;
+  position: sticky;
+  top: 12px;
+}
+
+.log {
+  margin-top: 12px;
+}
+
+.actionSummary {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.actionStatus,
+.actionBestHand {
+  line-height: 1.25;
+  min-height: 1.25em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.roundResult {
+  background: #17201a;
+  border: 1px solid rgba(23, 32, 26, 0.2);
+  border-radius: 8px;
+  color: #fffdf7;
+  display: grid;
+  gap: 10px;
+  margin-top: 0;
+  padding: 12px;
+  width: 100%;
+}
+
+.roundResultMain {
+  align-items: center;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 1fr;
+}
+
+.resultEyebrow {
+  color: #f7d154;
+  display: block;
+  font-size: 12px;
+  font-weight: 900;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+}
+
+.roundResult h3 {
+  font-size: 20px;
+  line-height: 1.1;
+}
+
+.roundResult p {
+  color: #dce5dd;
+  font-weight: 700;
+  margin-top: 4px;
+}
+
+.chipDelta {
+  border-radius: 8px;
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 9px 10px;
+  text-align: left;
+}
+
+.chipDelta span {
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.chipDelta strong {
+  font-size: 20px;
+  line-height: 1.1;
+}
+
+.chipDelta.positive {
+  background: #dceee2;
+  color: #24523a;
+}
+
+.chipDelta.negative {
+  background: #f8d8dc;
+  color: #94202a;
+}
+
+.chipDelta.neutral {
+  background: #e2ded5;
+  color: #423d35;
+}
+
+.resultAwards {
+  display: grid;
+  gap: 6px;
+}
+
+.resultAwards div {
+  align-items: center;
+  background: rgba(255, 253, 247, 0.08);
+  border: 1px solid rgba(255, 253, 247, 0.16);
+  border-radius: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
   justify-content: space-between;
+  padding: 7px 9px;
+}
+
+.resultAwards span {
+  color: #dce5dd;
 }
 
 .mobileCpuPlayers {
   display: none;
 }
 
+.seat-0 .playerStats {
+  gap: 6px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.seat-0 .playerStat {
+  display: block;
+}
+
+.seat-0 dt {
+  font-size: 12px;
+}
+
+.seat-0 dd {
+  font-size: 16px;
+}
+
+.player:not(.human) .playerStats {
+  font-size: 12px;
+  gap: 3px;
+}
+
+.player:not(.human) .playerStatCommitted,
+.player:not(.human) .playerStatStatus {
+  display: none;
+}
+
+.player:not(.human) .handName {
+  font-size: 12px;
+}
+
 .actionPanel {
   display: grid;
-  gap: 12px;
-  width: min(760px, 100%);
+  gap: 10px;
+  width: 100%;
+}
+
+.controls .buttons {
+  display: grid;
+  gap: 10px;
+  width: 100%;
 }
 
 .quickActions,
 .stepButtons,
 .presetButtons {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
   gap: 8px;
 }
 
+.quickActions {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.stepButtons {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.presetButtons {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .actionButton {
-  min-width: 96px;
+  min-width: 0;
+}
+
+.actionSlotPlaceholder {
+  min-height: 42px;
+  pointer-events: none;
+  visibility: hidden;
 }
 
 .dangerAction {
@@ -545,24 +737,24 @@ dd {
   border: 1px solid #d2cab8;
   border-radius: 8px;
   display: grid;
-  gap: 12px;
-  padding: 12px;
+  gap: 10px;
+  padding: 10px;
 }
 
 .wagerStats {
   display: grid;
-  gap: 8px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .wagerStats div {
   background: #f3f0e8;
   border-radius: 6px;
   display: flex;
-  gap: 10px;
+  gap: 8px;
   justify-content: space-between;
   min-width: 0;
-  padding: 8px 10px;
+  padding: 7px 8px;
 }
 
 .wagerStats span,
@@ -577,8 +769,8 @@ dd {
   color: #fffdf7;
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
-  padding: 14px;
+  gap: 8px;
+  padding: 10px;
 }
 
 .amountDisplay span {
@@ -587,7 +779,7 @@ dd {
 }
 
 .amountDisplay strong {
-  font-size: 34px;
+  font-size: 28px;
 }
 
 .amountDisplay em {
@@ -597,11 +789,11 @@ dd {
 
 .stepButtons button {
   font-size: 18px;
-  min-width: 56px;
+  min-width: 0;
 }
 
 .presetButtons button {
-  min-width: 88px;
+  min-width: 0;
 }
 
 .allInNote {
@@ -630,7 +822,7 @@ dd {
   display: grid;
   gap: 6px;
   margin: 0;
-  max-height: 280px;
+  max-height: 150px;
   overflow: auto;
   padding-left: 20px;
 }
@@ -688,16 +880,24 @@ dd {
 }
 
 @media (max-width: 1040px) {
+  .playLayout {
+    grid-template-columns: 1fr;
+  }
+
   .topbar,
   .controls {
     align-items: stretch;
     flex-direction: column;
   }
 
+  .controls {
+    position: static;
+  }
+
   .tableFelt {
     grid-template-areas:
-      "cpu1 cpu2"
-      "cpu3 cpu4"
+      "cpu2 cpu3"
+      "cpu1 cpu4"
       "center center"
       "human human";
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -717,19 +917,19 @@ dd {
     grid-area: human;
   }
 
-  .seat-1 {
+  .seat-left {
     grid-area: cpu1;
   }
 
-  .seat-2 {
+  .seat-top-left {
     grid-area: cpu2;
   }
 
-  .seat-3 {
+  .seat-top-right {
     grid-area: cpu3;
   }
 
-  .seat-4 {
+  .seat-right {
     grid-area: cpu4;
   }
 }
@@ -781,6 +981,7 @@ dd {
 
   .boardHeader {
     gap: 6px;
+    min-height: 30px;
   }
 
   .cards {
@@ -792,10 +993,11 @@ dd {
   }
 
   .potDisplay {
-    gap: 4px;
+    --pot-row-gap: 4px;
+    --pot-row-height: 29px;
   }
 
-  .potDisplay div {
+  .potRow {
     font-size: 12px;
     gap: 5px;
     padding: 6px 8px;
@@ -847,10 +1049,6 @@ dd {
     align-self: stretch;
   }
 
-  .player:not(.human) .thinkingText {
-    display: none;
-  }
-
   .player:not(.human) .holeCards {
     min-height: 0;
   }
@@ -886,13 +1084,19 @@ dd {
     align-items: center;
     display: grid;
     gap: 4px;
-    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-columns: auto minmax(0, 1fr);
   }
 
   .cpuSummaryMain strong {
     font-size: 12px;
     line-height: 1.1;
     min-width: 0;
+    white-space: nowrap;
+  }
+
+  .cpuSummaryMain .statusBadge {
+    grid-column: 1 / -1;
+    justify-self: start;
   }
 
   .cpuSeatOrder {
@@ -1029,6 +1233,28 @@ dd {
     gap: 12px;
   }
 
+  .actionSummary {
+    min-width: 0;
+  }
+
+  .roundResult {
+    padding: 12px;
+    width: 100%;
+  }
+
+  .roundResultMain {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+  }
+
+  .roundResult h3 {
+    font-size: 21px;
+  }
+
+  .chipDelta {
+    text-align: left;
+  }
+
   .actionPanel,
   .wagerControl {
     gap: 8px;
@@ -1045,7 +1271,7 @@ dd {
   }
 
   .quickActions {
-    grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .stepButtons,

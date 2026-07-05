@@ -3,6 +3,7 @@ import type { Card } from "./lib/cards";
 import { cardDisplayKey, getRankLabel, getSuitColorClass, getSuitSymbol } from "./lib/cardDisplay";
 import { decideCpuAction } from "./lib/cpu";
 import { getCpuActionDelay, sleep } from "./lib/cpuTiming";
+import { getSeatPosition, shouldShowHoleCards } from "./lib/tablePresentation";
 import {
   applyPlayerAction,
   BIG_BLIND,
@@ -160,26 +161,29 @@ export default function App() {
         </div>
       </header>
 
-      <PokerTable game={game} thinkingPlayerId={thinkingPlayerId} boardReveal={boardReveal} />
+      <div className="playLayout">
+        <PokerTable game={game} thinkingPlayerId={thinkingPlayerId} boardReveal={boardReveal} />
 
-      <section className="controls">
-        <div>
-          <h2>Action</h2>
-          <p>{actionStatusLabel(currentPlayer, game, thinkingPlayerId)}</p>
-          {humanBest && <p>Your best hand: {humanBest.name}</p>}
-        </div>
-        <div className="buttons">
-          {game.stage === "gameOver" ? (
-            <button onClick={() => setGame(restartGame())}>Restart</button>
-          ) : game.currentPlayerIndex === null ? (
-            <button onClick={nextHand}>Next Hand</button>
-          ) : currentPlayer?.isHuman ? (
-            <ActionPanel game={game} player={currentPlayer} legalActions={legalActions} disabled={isCpuThinking} onAction={dispatch} />
-          ) : (
-            <span className="waiting">{currentPlayer?.name ?? "CPU"} thinking...</span>
-          )}
-        </div>
-      </section>
+        <section className="controls">
+          <div className="actionSummary">
+            <h2>Action</h2>
+            <p className="actionStatus">{actionStatusLabel(currentPlayer, game, thinkingPlayerId)}</p>
+            <p className="actionBestHand" aria-hidden={!humanBest}>{humanBest ? `Your best hand: ${humanBest.name}` : ""}</p>
+          </div>
+          <div className="buttons">
+            {game.stage === "gameOver" ? (
+              <button onClick={() => setGame(restartGame())}>Restart</button>
+            ) : game.currentPlayerIndex === null ? (
+              <button onClick={nextHand}>Next Hand</button>
+            ) : currentPlayer?.isHuman ? (
+              <ActionPanel game={game} player={currentPlayer} legalActions={legalActions} disabled={isCpuThinking} onAction={dispatch} />
+            ) : (
+              <span className="waiting">{currentPlayer?.name ?? "CPU"} thinking...</span>
+            )}
+          </div>
+          <RoundResultPanel result={game.roundResult} />
+        </section>
+      </div>
 
       <section className="log">
         <h2>Game Log</h2>
@@ -191,6 +195,49 @@ export default function App() {
       </section>
     </main>
   );
+}
+
+function RoundResultPanel({ result }: { result: GameState["roundResult"] }) {
+  if (!result) return null;
+
+  const deltaClass = result.humanChipDelta > 0 ? "positive" : result.humanChipDelta < 0 ? "negative" : "neutral";
+  const showAwardDetails = result.awards.length > 1 || result.awards.some((award) => award.winnerIds.length > 1);
+
+  return (
+    <section className="roundResult" aria-label="Round result">
+      <div className="roundResultMain">
+        <div>
+          <span className="resultEyebrow">{result.kind === "showdown" ? "Showdown result" : "Fold result"}</span>
+          <h3>{result.title}</h3>
+          <p>{result.reason}</p>
+        </div>
+        <div className={`chipDelta ${deltaClass}`}>
+          <span>Your result</span>
+          <strong>{formatChipDelta(result.humanChipDelta)}</strong>
+        </div>
+      </div>
+
+      {showAwardDetails && (
+        <div className="resultAwards">
+          {result.awards.map((award) => (
+            <div key={`${award.potName}-${award.amount}-${award.winnerIds.join("-")}`}>
+              <strong>{award.potName}</strong>
+              <span>
+                {award.winnerNames.join(", ")}
+                {award.handName ? ` with ${award.handName}` : ""}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function formatChipDelta(delta: number): string {
+  if (delta > 0) return `+${delta} chips`;
+  if (delta < 0) return `${delta} chips`;
+  return "±0 chips";
 }
 
 function CpuPlayerList({ game, thinkingPlayerId }: { game: GameState; thinkingPlayerId: string | null }) {
@@ -275,10 +322,23 @@ function ActionPanel({
   return (
     <div className="actionPanel">
       <div className="quickActions">
-        {actionTypes.includes("check") && <button className="actionButton" disabled={disabled} onClick={() => onAction({ type: "check" })}>Check</button>}
-        {actionTypes.includes("call") && <button className="actionButton" disabled={disabled} onClick={() => onAction({ type: "call" })}>Call {Math.min(callAmount, player.chips)}</button>}
-        {actionTypes.includes("all-in") && <button className="actionButton allInAction" disabled={disabled} onClick={() => onAction({ type: "all-in" })}>All-in</button>}
-        {actionTypes.includes("fold") && <button className="actionButton dangerAction" disabled={disabled} onClick={() => onAction({ type: "fold" })}>Fold</button>}
+        {actionTypes.includes("check") ? (
+          <button className="actionButton" disabled={disabled} onClick={() => onAction({ type: "check" })}>Check</button>
+        ) : actionTypes.includes("call") ? (
+          <button className="actionButton" disabled={disabled} onClick={() => onAction({ type: "call" })}>Call {Math.min(callAmount, player.chips)}</button>
+        ) : (
+          <span className="actionButton actionSlotPlaceholder" aria-hidden="true" />
+        )}
+        {actionTypes.includes("all-in") ? (
+          <button className="actionButton allInAction" disabled={disabled} onClick={() => onAction({ type: "all-in" })}>All-in</button>
+        ) : (
+          <span className="actionButton actionSlotPlaceholder" aria-hidden="true" />
+        )}
+        {actionTypes.includes("fold") ? (
+          <button className="actionButton dangerAction" disabled={disabled} onClick={() => onAction({ type: "fold" })}>Fold</button>
+        ) : (
+          <span className="actionButton actionSlotPlaceholder" aria-hidden="true" />
+        )}
       </div>
 
       {mode !== "none" && (
@@ -400,7 +460,7 @@ function CpuSummarySeat({
     isThinking ? "thinking" : "",
     `status-${player.status.toLowerCase().replace("-", "")}`,
   ].filter(Boolean).join(" ");
-  const showCards = reveal && player.status !== "Eliminated";
+  const showCards = (reveal || player.status === "Eliminated") && shouldShowHoleCards(player, game);
 
   return (
     <article className={className}>
@@ -421,7 +481,7 @@ function CpuSummarySeat({
       {showCards && (
         <div className="cards cpuSummaryCards">
           {player.holeCards.map((card, cardIndex) => (
-            <CardView key={`${cardDisplayKey(card)}-${cardIndex}`} card={card} muted={player.status === "Folded"} />
+            <CardView key={`${cardDisplayKey(card)}-${cardIndex}`} card={card} faceDown={!reveal} muted={player.status === "Folded"} />
           ))}
         </div>
       )}
@@ -462,12 +522,16 @@ function PotDisplay({ game }: { game: GameState }) {
 
   return (
     <div className="potDisplay">
-      {pots.map((pot, index) => (
-        <div key={`${index}-${pot.amount}`}>
-          <strong>{index === 0 ? "Main Pot" : `Side Pot ${index}`}: {pot.amount}</strong>
-          <span>eligible: {pot.eligiblePlayerIds.map((id) => game.players.find((player) => player.id === id)?.name ?? id).join(", ") || "none"}</span>
-        </div>
-      ))}
+      {pots.map((pot, index) => {
+        const eligibleNames = pot.eligiblePlayerIds.map((id) => game.players.find((player) => player.id === id)?.name ?? id).join(", ") || "none";
+
+        return (
+          <div className="potRow" key={`${index}-${pot.amount}`}>
+            <strong className="potAmount">{index === 0 ? "Main Pot" : `Side Pot ${index}`}: {pot.amount}</strong>
+            <span className="potEligible" title={eligibleNames}>eligible: {eligibleNames}</span>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -496,20 +560,20 @@ function PlayerSeat({
   const seatClass = [
     "player",
     `seat-${index}`,
+    `seat-${getSeatPosition(index)}`,
     player.isHuman ? "human" : "",
     reveal ? "cards-revealed" : "",
     isCurrent ? "current" : "",
     isThinking ? "thinking" : "",
     `status-${player.status.toLowerCase().replace("-", "")}`,
   ].filter(Boolean).join(" ");
-  const showCards = player.status !== "Eliminated";
+  const showCards = shouldShowHoleCards(player, game);
 
   return (
     <article className={seatClass}>
       <div className="playerHead">
         <div>
           <h3>{player.name}</h3>
-          {isThinking && <p className="thinkingText">{player.name} thinking...</p>}
         </div>
         <div className="badges">
           {badges.map((badge) => (
@@ -545,7 +609,7 @@ function PlayerSeat({
           <dd>{player.status}</dd>
         </div>
       </dl>
-      {evaluation && <p className="handName">{evaluation.name}</p>}
+      <p className="handName" aria-hidden={!evaluation}>{evaluation?.name ?? ""}</p>
     </article>
   );
 }
