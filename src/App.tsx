@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { cardLabel, type Card } from "./lib/cards";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import type { Card } from "./lib/cards";
+import { cardDisplayKey, getRankLabel, getSuitColorClass, getSuitSymbol } from "./lib/cardDisplay";
 import { decideCpuAction } from "./lib/cpu";
 import { getCpuActionDelay, sleep } from "./lib/cpuTiming";
 import {
@@ -32,11 +33,20 @@ import {
 
 const humanIndex = 0;
 
+interface BoardReveal {
+  handNumber: number;
+  from: number;
+  to: number;
+  label: string;
+}
+
 export default function App() {
   const [game, setGame] = useState<GameState>(() => createInitialGame());
   const [thinkingPlayerId, setThinkingPlayerId] = useState<string | null>(null);
+  const [boardReveal, setBoardReveal] = useState<BoardReveal | null>(null);
   const mountedRef = useRef(false);
   const pendingCpuActionRef = useRef<string | null>(null);
+  const previousBoardRef = useRef({ handNumber: game.handNumber, count: game.communityCards.length });
   const currentPlayer = game.currentPlayerIndex === null ? null : game.players[game.currentPlayerIndex];
   const legalActions = useMemo(() => getLegalActions(game, humanIndex), [game]);
   const humanBest = playerBestHand(game.players[humanIndex], game.communityCards);
@@ -48,6 +58,28 @@ export default function App() {
       mountedRef.current = false;
     };
   }, []);
+
+  useEffect(() => {
+    const previous = previousBoardRef.current;
+    const count = game.communityCards.length;
+
+    if (previous.handNumber !== game.handNumber) {
+      previousBoardRef.current = { handNumber: game.handNumber, count };
+      setBoardReveal(null);
+      return;
+    }
+
+    if (count > previous.count) {
+      setBoardReveal({
+        handNumber: game.handNumber,
+        from: previous.count,
+        to: count,
+        label: boardRevealLabel(previous.count, count),
+      });
+    }
+
+    previousBoardRef.current = { handNumber: game.handNumber, count };
+  }, [game.handNumber, game.communityCards.length]);
 
   useEffect(() => {
     const playerIndex = game.currentPlayerIndex;
@@ -128,31 +160,7 @@ export default function App() {
         </div>
       </header>
 
-      <section className="table">
-        <div className="board">
-          <h2>Community Cards</h2>
-          <div className="cards">
-            {Array.from({ length: 5 }, (_, index) => (
-              <CardView key={index} card={game.communityCards[index]} hidden={!game.communityCards[index]} />
-            ))}
-          </div>
-        </div>
-
-        <PotBreakdown game={game} />
-
-        <div className="players">
-          {game.players.map((player, index) => (
-            <PlayerPanel
-              key={player.id}
-              player={player}
-              index={index}
-              game={game}
-              isCurrent={game.currentPlayerIndex === index}
-              reveal={player.isHuman || game.showdown || game.stage === "gameOver"}
-            />
-          ))}
-        </div>
-      </section>
+      <PokerTable game={game} thinkingPlayerId={thinkingPlayerId} boardReveal={boardReveal} />
 
       <section className="controls">
         <div>
@@ -166,7 +174,7 @@ export default function App() {
           ) : game.currentPlayerIndex === null ? (
             <button onClick={nextHand}>Next Hand</button>
           ) : currentPlayer?.isHuman ? (
-            <HumanActionControls game={game} player={currentPlayer} legalActions={legalActions} disabled={isCpuThinking} onAction={dispatch} />
+            <ActionPanel game={game} player={currentPlayer} legalActions={legalActions} disabled={isCpuThinking} onAction={dispatch} />
           ) : (
             <span className="waiting">{currentPlayer?.name ?? "CPU"} thinking...</span>
           )}
@@ -185,7 +193,27 @@ export default function App() {
   );
 }
 
-function HumanActionControls({
+function CpuPlayerList({ game, thinkingPlayerId }: { game: GameState; thinkingPlayerId: string | null }) {
+  return (
+    <section className="mobileCpuPlayers" aria-label="CPU players">
+      {game.players.map((player, index) => (
+        player.isHuman ? null : (
+          <CpuSummarySeat
+            key={`mobile-${player.id}`}
+            player={player}
+            index={index}
+            game={game}
+            isCurrent={game.currentPlayerIndex === index}
+            isThinking={thinkingPlayerId === player.id}
+            reveal={game.showdown || game.stage === "gameOver"}
+          />
+        )
+      ))}
+    </section>
+  );
+}
+
+function ActionPanel({
   game,
   player,
   legalActions,
@@ -247,10 +275,10 @@ function HumanActionControls({
   return (
     <div className="actionPanel">
       <div className="quickActions">
-        {actionTypes.includes("check") && <button disabled={disabled} onClick={() => onAction({ type: "check" })}>Check</button>}
-        {actionTypes.includes("call") && <button disabled={disabled} onClick={() => onAction({ type: "call" })}>Call {Math.min(callAmount, player.chips)}</button>}
-        {actionTypes.includes("all-in") && <button disabled={disabled} onClick={() => onAction({ type: "all-in" })}>All-in</button>}
-        {actionTypes.includes("fold") && <button disabled={disabled} onClick={() => onAction({ type: "fold" })}>Fold</button>}
+        {actionTypes.includes("check") && <button className="actionButton" disabled={disabled} onClick={() => onAction({ type: "check" })}>Check</button>}
+        {actionTypes.includes("call") && <button className="actionButton" disabled={disabled} onClick={() => onAction({ type: "call" })}>Call {Math.min(callAmount, player.chips)}</button>}
+        {actionTypes.includes("all-in") && <button className="actionButton allInAction" disabled={disabled} onClick={() => onAction({ type: "all-in" })}>All-in</button>}
+        {actionTypes.includes("fold") && <button className="actionButton dangerAction" disabled={disabled} onClick={() => onAction({ type: "fold" })}>Fold</button>}
       </div>
 
       {mode !== "none" && (
@@ -319,11 +347,121 @@ function actionStatusLabel(currentPlayer: Player | null, game: GameState, thinki
   return "Hand complete";
 }
 
-function PotBreakdown({ game }: { game: GameState }) {
+function PokerTable({ game, thinkingPlayerId, boardReveal }: { game: GameState; thinkingPlayerId: string | null; boardReveal: BoardReveal | null }) {
+  return (
+    <section className="table" aria-label="Poker table">
+      <div className="tableFelt">
+        <CpuPlayerList game={game} thinkingPlayerId={thinkingPlayerId} />
+
+        {game.players.map((player, index) => (
+          <PlayerSeat
+            key={player.id}
+            player={player}
+            index={index}
+            game={game}
+            isCurrent={game.currentPlayerIndex === index}
+            isThinking={thinkingPlayerId === player.id}
+            reveal={player.isHuman || game.showdown || game.stage === "gameOver"}
+          />
+        ))}
+
+        <div className="tableCenter">
+          <CommunityCards cards={game.communityCards} reveal={boardReveal} />
+          <PotDisplay game={game} />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function CpuSummarySeat({
+  player,
+  index,
+  game,
+  isCurrent,
+  isThinking,
+  reveal,
+}: {
+  player: Player;
+  index: number;
+  game: GameState;
+  isCurrent: boolean;
+  isThinking: boolean;
+  reveal: boolean;
+}) {
+  const badges = [
+    game.dealerIndex === index ? "D" : null,
+    game.smallBlindIndex === index ? "SB" : null,
+    game.bigBlindIndex === index ? "BB" : null,
+  ].filter(Boolean);
+  const className = [
+    "cpuSummarySeat",
+    isCurrent ? "current" : "",
+    isThinking ? "thinking" : "",
+    `status-${player.status.toLowerCase().replace("-", "")}`,
+  ].filter(Boolean).join(" ");
+  const showCards = reveal && player.status !== "Eliminated";
+
+  return (
+    <article className={className}>
+      <div className="cpuSummaryMain">
+        <span className="cpuSeatOrder">#{index + 1}</span>
+        <strong>{player.name}</strong>
+        <StatusBadge status={player.status} isThinking={isThinking} />
+      </div>
+      <div className="cpuSummaryBadges">
+        {badges.map((badge) => (
+          <span className="positionBadge" key={badge}>{badge}</span>
+        ))}
+      </div>
+      <div className="cpuSummaryStats">
+        <span>Chips <strong>{player.chips}</strong></span>
+        <span>Bet <strong>{player.roundBet}</strong></span>
+      </div>
+      {showCards && (
+        <div className="cards cpuSummaryCards">
+          {player.holeCards.map((card, cardIndex) => (
+            <CardView key={`${cardDisplayKey(card)}-${cardIndex}`} card={card} muted={player.status === "Folded"} />
+          ))}
+        </div>
+      )}
+    </article>
+  );
+}
+
+function CommunityCards({ cards, reveal }: { cards: Card[]; reveal: BoardReveal | null }) {
+  const label = reveal?.label;
+
+  return (
+    <div className="board">
+      <div className="boardHeader">
+        <h2>Community Cards</h2>
+        {label && <span key={`${reveal.handNumber}-${reveal.from}-${reveal.to}`} className="revealNotice">{label}</span>}
+      </div>
+      <div className="cards boardCards">
+        {Array.from({ length: 5 }, (_, index) => {
+          const card = cards[index];
+          const isRevealed = Boolean(reveal && index >= reveal.from && index < reveal.to);
+          return (
+            <CardView
+              key={card ? cardDisplayKey(card) : `empty-${index}`}
+              card={card}
+              faceDown={!card}
+              revealed={isRevealed}
+              revealDelayMs={isRevealed ? (index - (reveal?.from ?? index)) * 80 : 0}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function PotDisplay({ game }: { game: GameState }) {
   const pots = game.pots.length > 0 ? game.pots : [{ amount: game.pot, eligiblePlayerIds: game.players.filter((player) => player.status !== "Folded").map((player) => player.id) }];
 
   return (
-    <div className="potBreakdown">
+    <div className="potDisplay">
       {pots.map((pot, index) => (
         <div key={`${index}-${pot.amount}`}>
           <strong>{index === 0 ? "Main Pot" : `Side Pot ${index}`}: {pot.amount}</strong>
@@ -334,43 +472,75 @@ function PotBreakdown({ game }: { game: GameState }) {
   );
 }
 
-function PlayerPanel({ player, index, game, isCurrent, reveal }: { player: Player; index: number; game: GameState; isCurrent: boolean; reveal: boolean }) {
+function PlayerSeat({
+  player,
+  index,
+  game,
+  isCurrent,
+  isThinking,
+  reveal,
+}: {
+  player: Player;
+  index: number;
+  game: GameState;
+  isCurrent: boolean;
+  isThinking: boolean;
+  reveal: boolean;
+}) {
   const badges = [
     game.dealerIndex === index ? "D" : null,
     game.smallBlindIndex === index ? "SB" : null,
     game.bigBlindIndex === index ? "BB" : null,
   ].filter(Boolean);
   const evaluation = game.lastEvaluations[player.id];
+  const seatClass = [
+    "player",
+    `seat-${index}`,
+    player.isHuman ? "human" : "",
+    reveal ? "cards-revealed" : "",
+    isCurrent ? "current" : "",
+    isThinking ? "thinking" : "",
+    `status-${player.status.toLowerCase().replace("-", "")}`,
+  ].filter(Boolean).join(" ");
+  const showCards = player.status !== "Eliminated";
 
   return (
-    <article className={`player ${player.isHuman ? "human" : ""} ${isCurrent ? "current" : ""}`}>
+    <article className={seatClass}>
       <div className="playerHead">
-        <h3>{player.name}</h3>
+        <div>
+          <h3>{player.name}</h3>
+          {isThinking && <p className="thinkingText">{player.name} thinking...</p>}
+        </div>
         <div className="badges">
           {badges.map((badge) => (
-            <span key={badge}>{badge}</span>
+            <span className="positionBadge" key={badge}>{badge}</span>
           ))}
         </div>
       </div>
-      <div className="cards">
-        {player.holeCards.map((card, cardIndex) => (
-          <CardView key={cardIndex} card={card} hidden={!reveal} />
-        ))}
+      <div className="playerStatusRow">
+        <StatusBadge status={player.status} isThinking={isThinking} />
       </div>
-      <dl>
-        <div>
+      <div className="cards holeCards">
+        {showCards
+          ? player.holeCards.map((card, cardIndex) => (
+              <CardView key={`${cardDisplayKey(card)}-${cardIndex}`} card={card} faceDown={!reveal} muted={player.status === "Folded"} />
+            ))
+          : <span className="noCards">No cards</span>}
+      </div>
+      <dl className="playerStats">
+        <div className="playerStat playerStatChips">
           <dt>Chips</dt>
           <dd>{player.chips}</dd>
         </div>
-        <div>
+        <div className="playerStat playerStatCommitted">
           <dt>Committed</dt>
           <dd>{player.committed}</dd>
         </div>
-        <div>
+        <div className="playerStat playerStatBet">
           <dt>Round Bet</dt>
           <dd>{player.roundBet}</dd>
         </div>
-        <div>
+        <div className="playerStat playerStatStatus">
           <dt>Status</dt>
           <dd>{player.status}</dd>
         </div>
@@ -380,12 +550,66 @@ function PlayerPanel({ player, index, game, isCurrent, reveal }: { player: Playe
   );
 }
 
-function CardView({ card, hidden }: { card?: Card; hidden?: boolean }) {
-  if (!card || hidden) {
-    return <span className="card back">{card ? "??" : ""}</span>;
+function StatusBadge({ status, isThinking }: { status: Player["status"]; isThinking: boolean }) {
+  if (isThinking) return <span className="statusBadge statusThinking">THINKING...</span>;
+
+  const className = `statusBadge status${status.replace("-", "")}`;
+  const label = status === "All-in" ? "ALL-IN" : status.toUpperCase();
+  return <span className={className}>{label}</span>;
+}
+
+function CardView({
+  card,
+  faceDown = false,
+  revealed = false,
+  revealDelayMs = 0,
+  muted = false,
+}: {
+  card?: Card;
+  faceDown?: boolean;
+  revealed?: boolean;
+  revealDelayMs?: number;
+  muted?: boolean;
+}) {
+  const style = revealed ? ({ "--reveal-delay": `${revealDelayMs}ms` } as CSSProperties) : undefined;
+  const classes = ["card", revealed ? "card-revealed" : "", muted ? "muted" : ""].filter(Boolean).join(" ");
+
+  if (!card) {
+    return <span className={`${classes} empty`} style={style} aria-label="Empty card slot" />;
   }
-  const red = card.suit === "hearts" || card.suit === "diamonds";
-  return <span className={`card ${red ? "red" : "black"}`}>{cardLabel(card)}</span>;
+
+  if (faceDown) {
+    return (
+      <span className={`${classes} back`} style={style} aria-label="Face down card">
+        <span className="cardBackMark">◆</span>
+      </span>
+    );
+  }
+
+  const suitColorClass = getSuitColorClass(card.suit);
+  const rank = getRankLabel(card);
+  const suit = getSuitSymbol(card.suit);
+
+  return (
+    <span className={`${classes} face ${suitColorClass}`} style={style} aria-label={`${rank} of ${card.suit}`}>
+      <span className="card-corner top-left">
+        <strong>{rank}</strong>
+        <span>{suit}</span>
+      </span>
+      <span className="card-center-suit">{suit}</span>
+      <span className="card-corner bottom-right">
+        <strong>{rank}</strong>
+        <span>{suit}</span>
+      </span>
+    </span>
+  );
+}
+
+function boardRevealLabel(from: number, to: number): string {
+  if (from === 0 && to === 3) return "Flop 公開";
+  if (from === 3 && to === 4) return "Turn 公開";
+  if (from === 4 && to === 5) return "River 公開";
+  return "Board 公開";
 }
 
 function stageLabel(stage: GameState["stage"]): string {
