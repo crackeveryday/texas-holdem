@@ -111,6 +111,35 @@ describe("game betting", () => {
     expect(next.currentPlayerIndex).toBeNull();
   });
 
+  it("summarizes a fold win with the winner and human chip delta", () => {
+    const state = createInitialGame();
+    const players = state.players.map((player, index) => ({
+      ...player,
+      chips: index === 0 ? 990 : 980,
+      status: index === 0 ? ("Active" as const) : ("Folded" as const),
+      committed: index === 0 ? 10 : 20,
+    }));
+    const forced = {
+      ...state,
+      players,
+      currentPlayerIndex: 0,
+      pot: 90,
+      pots: calculatePots(players),
+      currentBet: 20,
+      handStartChips: Object.fromEntries(players.map((player) => [player.id, 1000])),
+    };
+
+    const next = applyPlayerAction(forced, 0, { type: "check" });
+
+    expect(next.roundResult).toMatchObject({
+      kind: "fold",
+      title: "You win!",
+      reason: "You win because everyone else folded",
+      winnerIds: ["p0"],
+      humanChipDelta: 80,
+    });
+  });
+
   it("lets a short stack call all-in without asking that player to act again", () => {
     const state = createInitialGame();
     const players = state.players.map((player, index) => ({
@@ -163,6 +192,111 @@ describe("game betting", () => {
     expect(next.communityCards).toHaveLength(5);
     expect(next.showdown).toBe(true);
     expect(next.players.reduce((total, player) => total + player.chips, 0)).toBe(totalChips(forced));
+  });
+
+  it("summarizes a showdown win with the winning hand", () => {
+    const state = createInitialGame();
+    const players = state.players.map((player, index) => ({
+      ...player,
+      holeCards: [c("AS AD"), c("KS KD"), c("2C 7D"), c("3C 4D"), c("5C 6D")][index],
+      chips: index === 0 ? 80 : 0,
+      status: index <= 2 ? (index === 0 ? ("Active" as const) : ("All-in" as const)) : ("Folded" as const),
+      acted: index !== 0,
+      roundBet: index <= 2 ? 100 : 0,
+      committed: index <= 2 ? 100 : 0,
+    }));
+    players[0].roundBet = 20;
+    players[0].committed = 20;
+    const forced = {
+      ...state,
+      players,
+      deck: c("AC 9D 4S 8C QH"),
+      communityCards: [],
+      currentPlayerIndex: 0,
+      currentBet: 100,
+      pot: 220,
+      pots: calculatePots(players),
+      handStartChips: Object.fromEntries(players.map((player) => [player.id, 100])),
+    };
+
+    const next = applyPlayerAction(forced, 0, { type: "call" });
+
+    expect(next.roundResult).toMatchObject({
+      kind: "showdown",
+      title: "You win!",
+      reason: "You won with Three of a Kind",
+      winnerIds: ["p0"],
+      humanChipDelta: 200,
+    });
+  });
+
+  it("summarizes a split pot with all winners", () => {
+    const state = createInitialGame();
+    const players = state.players.map((player, index) => ({
+      ...player,
+      holeCards: [c("AS KD"), c("AH KC"), c("2C 7D"), c("3C 4D"), c("5C 6D")][index],
+      chips: index === 0 ? 80 : 0,
+      status: index <= 1 ? (index === 0 ? ("Active" as const) : ("All-in" as const)) : ("Folded" as const),
+      acted: index !== 0,
+      roundBet: index <= 1 ? 100 : 0,
+      committed: index <= 1 ? 100 : 0,
+    }));
+    players[0].roundBet = 20;
+    players[0].committed = 20;
+    const forced = {
+      ...state,
+      players,
+      deck: c("QS JD TC 2H 3S"),
+      communityCards: [],
+      currentPlayerIndex: 0,
+      currentBet: 100,
+      pot: 120,
+      pots: calculatePots(players),
+      handStartChips: Object.fromEntries(players.map((player) => [player.id, 100])),
+    };
+
+    const next = applyPlayerAction(forced, 0, { type: "call" });
+
+    expect(next.roundResult).toMatchObject({
+      kind: "showdown",
+      title: "Split pot",
+      winnerIds: ["p0", "p1"],
+      winnerNames: ["You", "CPU 1"],
+      humanChipDelta: 0,
+    });
+    expect(next.roundResult?.reason).toBe("You, CPU 1 split the pot with Straight");
+  });
+
+  it("calculates the human chip delta from the final stack when side pots exist", () => {
+    const state = createInitialGame();
+    const players = state.players.map((player, index) => ({
+      ...player,
+      holeCards: [c("AS AD"), c("KS KD"), c("QS QD"), c("3C 4D"), c("5C 6D")][index],
+      chips: index === 0 ? 30 : 0,
+      status: index <= 2 ? (index === 0 ? ("Active" as const) : ("All-in" as const)) : ("Folded" as const),
+      acted: index !== 0,
+      roundBet: index === 0 ? 20 : index <= 2 ? 100 : 0,
+      committed: index === 0 ? 20 : index <= 2 ? 100 : 0,
+    }));
+    const forced = {
+      ...state,
+      players,
+      deck: c("AC 9D 4S 8C QH"),
+      communityCards: [],
+      currentPlayerIndex: 0,
+      currentBet: 100,
+      pot: 220,
+      pots: calculatePots(players),
+      handStartChips: { p0: 100, p1: 100, p2: 100, p3: 100, p4: 100 },
+    };
+
+    const next = applyPlayerAction(forced, 0, { type: "call" });
+
+    expect(next.roundResult?.awards).toHaveLength(2);
+    expect(next.roundResult).toMatchObject({
+      title: "You win!",
+      humanChipDelta: 50,
+    });
   });
 
   it("reopens action after a full raise", () => {

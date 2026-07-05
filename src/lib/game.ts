@@ -27,6 +27,27 @@ export interface Player {
   raisedThisRound: boolean;
 }
 
+export type RoundResultKind = "showdown" | "fold";
+
+export interface RoundResultPotAward {
+  potName: string;
+  amount: number;
+  winnerIds: string[];
+  winnerNames: string[];
+  handName?: string;
+  shares: Record<string, number>;
+}
+
+export interface RoundResult {
+  kind: RoundResultKind;
+  title: string;
+  reason: string;
+  winnerIds: string[];
+  winnerNames: string[];
+  humanChipDelta: number;
+  awards: RoundResultPotAward[];
+}
+
 export interface GameState {
   players: Player[];
   deck: Card[];
@@ -45,6 +66,8 @@ export interface GameState {
   showdown: boolean;
   roundRaiseCount: number;
   lastFullRaiseAmount: number;
+  handStartChips: Record<string, number>;
+  roundResult: RoundResult | null;
 }
 
 export interface GameAction {
@@ -88,6 +111,8 @@ export function createInitialGame(): GameState {
     showdown: false,
     roundRaiseCount: 0,
     lastFullRaiseAmount: BIG_BLIND,
+    handStartChips: {},
+    roundResult: null,
   });
 }
 
@@ -110,6 +135,7 @@ export function startHand(previous: GameState): GameState {
     raisedThisRound: false,
     status: player.chips > 0 ? ("Active" as const) : ("Eliminated" as const),
   }));
+  const handStartChips = Object.fromEntries(players.map((player) => [player.id, player.chips]));
   let deck = shuffleDeck(createDeck());
   const dealerIndex = nextEligibleIndex(players, previous.handNumber === 0 ? previous.dealerIndex - 1 : previous.dealerIndex);
   const smallBlindIndex = nextEligibleIndex(players, dealerIndex);
@@ -147,6 +173,8 @@ export function startHand(previous: GameState): GameState {
     showdown: false,
     roundRaiseCount: 0,
     lastFullRaiseAmount: BIG_BLIND,
+    handStartChips,
+    roundResult: null,
     logs: [
       `Hand ${previous.handNumber + 1} started. ${players[smallBlindIndex].name} posts SB ${SMALL_BLIND}, ${players[bigBlindIndex].name} posts BB ${BIG_BLIND}.`,
       ...previous.logs,
@@ -335,6 +363,7 @@ function showdown(state: GameState): GameState {
   const pots = calculatePots(state.players);
   const result = resolvePots(pots, state.players, state.communityCards, state.players.map((player) => player.id));
   const players = applyPayouts(state.players, result.payouts);
+  const roundResult = buildShowdownRoundResult(state, players, result.awards);
   return finishHand({
     ...state,
     players,
@@ -344,6 +373,7 @@ function showdown(state: GameState): GameState {
     currentPlayerIndex: null,
     lastEvaluations: result.evaluations,
     showdown: true,
+    roundResult,
     logs: [...showdownLogs(result.awards, players), ...state.logs],
   });
 }
@@ -353,6 +383,7 @@ function awardSingleWinner(state: GameState, winnerId: string): GameState {
   const totalPot = sumPots(pots);
   const players = payWinners(state.players, [winnerId], totalPot);
   const winner = players.find((player) => player.id === winnerId)!;
+  const roundResult = buildFoldRoundResult(state, players, winnerId, totalPot);
   return finishHand({
     ...state,
     players,
@@ -361,6 +392,7 @@ function awardSingleWinner(state: GameState, winnerId: string): GameState {
     stage: "handOver",
     currentPlayerIndex: null,
     showdown: false,
+    roundResult,
     logs: [`${winner.name} wins ${totalPot}; everyone else folded.`, ...state.logs],
   });
 }
@@ -514,6 +546,84 @@ function showdownLogs(awards: PotAward[], players: Player[]): string[] {
     const hand = award.handName ? ` with ${award.handName}` : "";
     return `${potName(award.potIndex)} won by ${winners.join(", ")}${hand}.${split}`;
   });
+}
+
+function buildShowdownRoundResult(state: GameState, players: Player[], awards: PotAward[]): RoundResult {
+  const winnerIds = uniqueIds(awards.flatMap((award) => award.winnerIds));
+  const winnerNames = winnerIds.map((id) => playerName(players, id));
+  const primaryAward = awards.find((award) => award.winnerIds.some((id) => id === players[0].id)) ?? awards[0];
+  const primaryWinnerId = primaryAward.winnerIds[0];
+  const primaryWinnerName = playerName(players, primaryWinnerId);
+  const primaryHandName = primaryAward.handName ?? "the best hand";
+  const hasSplitAward = awards.some((award) => award.winnerIds.length > 1);
+  const splitAward = awards.find((award) => award.winnerIds.length > 1);
+  const splitWinnerNames = splitAward?.winnerIds.map((id) => playerName(players, id)) ?? winnerNames;
+  const splitHandName = splitAward?.handName ?? primaryHandName;
+  const title = hasSplitAward ? "Split pot" : winnerTitle(primaryWinnerName);
+  const reason =
+    hasSplitAward
+      ? `${splitWinnerNames.join(", ")} split the pot with ${splitHandName}`
+      : awards.length > 1
+        ? `${winnerSubject(primaryWinnerName)} won ${potName(primaryAward.potIndex)} with ${primaryHandName}`
+      : `${winnerSubject(primaryWinnerName)} won with ${primaryHandName}`;
+
+  return {
+    kind: "showdown",
+    title,
+    reason,
+    winnerIds,
+    winnerNames,
+    humanChipDelta: chipDelta(state, players[0]),
+    awards: awards.map((award) => ({
+      potName: potName(award.potIndex),
+      amount: award.pot.amount,
+      winnerIds: award.winnerIds,
+      winnerNames: award.winnerIds.map((id) => playerName(players, id)),
+      handName: award.handName,
+      shares: award.shares,
+    })),
+  };
+}
+
+function buildFoldRoundResult(state: GameState, players: Player[], winnerId: string, totalPot: number): RoundResult {
+  const winnerName = playerName(players, winnerId);
+  return {
+    kind: "fold",
+    title: winnerTitle(winnerName),
+    reason: `${winnerName === "You" ? "You win" : `${winnerName} wins`} because everyone else folded`,
+    winnerIds: [winnerId],
+    winnerNames: [winnerName],
+    humanChipDelta: chipDelta(state, players[0]),
+    awards: [
+      {
+        potName: "Pot",
+        amount: totalPot,
+        winnerIds: [winnerId],
+        winnerNames: [winnerName],
+        shares: { [winnerId]: totalPot },
+      },
+    ],
+  };
+}
+
+function chipDelta(state: GameState, player: Player): number {
+  return player.chips - (state.handStartChips[player.id] ?? player.chips);
+}
+
+function playerName(players: Player[], playerId: string): string {
+  return players.find((player) => player.id === playerId)?.name ?? playerId;
+}
+
+function winnerTitle(name: string): string {
+  return name === "You" ? "You win!" : `${name} wins`;
+}
+
+function winnerSubject(name: string): string {
+  return name === "You" ? "You" : name;
+}
+
+function uniqueIds(ids: string[]): string[] {
+  return ids.filter((id, index) => ids.indexOf(id) === index);
 }
 
 function potName(index: number): string {

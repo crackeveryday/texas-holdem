@@ -163,10 +163,11 @@ export default function App() {
       <PokerTable game={game} thinkingPlayerId={thinkingPlayerId} boardReveal={boardReveal} />
 
       <section className="controls">
-        <div>
+        <div className="actionSummary">
           <h2>Action</h2>
           <p>{actionStatusLabel(currentPlayer, game, thinkingPlayerId)}</p>
           {humanBest && <p>Your best hand: {humanBest.name}</p>}
+          <RoundResultPanel result={game.roundResult} />
         </div>
         <div className="buttons">
           {game.stage === "gameOver" ? (
@@ -191,6 +192,49 @@ export default function App() {
       </section>
     </main>
   );
+}
+
+function RoundResultPanel({ result }: { result: GameState["roundResult"] }) {
+  if (!result) return null;
+
+  const deltaClass = result.humanChipDelta > 0 ? "positive" : result.humanChipDelta < 0 ? "negative" : "neutral";
+  const showAwardDetails = result.awards.length > 1 || result.awards.some((award) => award.winnerIds.length > 1);
+
+  return (
+    <section className="roundResult" aria-label="Round result">
+      <div className="roundResultMain">
+        <div>
+          <span className="resultEyebrow">{result.kind === "showdown" ? "Showdown result" : "Fold result"}</span>
+          <h3>{result.title}</h3>
+          <p>{result.reason}</p>
+        </div>
+        <div className={`chipDelta ${deltaClass}`}>
+          <span>Your result</span>
+          <strong>{formatChipDelta(result.humanChipDelta)}</strong>
+        </div>
+      </div>
+
+      {showAwardDetails && (
+        <div className="resultAwards">
+          {result.awards.map((award) => (
+            <div key={`${award.potName}-${award.amount}-${award.winnerIds.join("-")}`}>
+              <strong>{award.potName}</strong>
+              <span>
+                {award.winnerNames.join(", ")}
+                {award.handName ? ` with ${award.handName}` : ""}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function formatChipDelta(delta: number): string {
+  if (delta > 0) return `+${delta} chips`;
+  if (delta < 0) return `${delta} chips`;
+  return "±0 chips";
 }
 
 function CpuPlayerList({ game, thinkingPlayerId }: { game: GameState; thinkingPlayerId: string | null }) {
