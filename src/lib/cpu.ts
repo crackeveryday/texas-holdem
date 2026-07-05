@@ -1,6 +1,16 @@
 import type { Card, Rank } from "./cards";
 import { evaluateBestHand, HandRank } from "./handEvaluator";
-import { BET_OPTIONS, MAX_RAISES_PER_ROUND, type GameAction, type GameState, getLegalActions } from "./game";
+import { BIG_BLIND, MAX_RAISES_PER_ROUND, type GameAction, type GameState, getLegalActions } from "./game";
+import {
+  calculatePresetBetAmount,
+  calculatePresetRaiseToAmount,
+  getCallAmount,
+  getMaxBetAmount,
+  getMaxRaiseTo,
+  getMinBet,
+  getMinRaiseTo,
+  type WagerPreset,
+} from "./wager";
 
 export type CpuHandCategory = "veryStrong" | "strong" | "medium" | "weak";
 
@@ -19,6 +29,8 @@ export function decideCpuAction(state: GameState, playerIndex: number, random = 
     state.communityCards.length === 0 ? evaluatePreflopHand(player.holeCards) : evaluatePostflopHand(player.holeCards, state.communityCards);
   const pressure = getCallPressure(toCall, player.chips);
   const canRaise = canCpuRaise(state, playerIndex, legal, evaluation.category);
+  const betAmount = pickBetSize(state, playerIndex, evaluation.score);
+  const raiseToAmount = pickRaiseToAmount(state, playerIndex, evaluation.score);
   const roll = random();
 
   if (shouldAllIn(state, playerIndex, evaluation, toCall, pressure, legal, roll)) {
@@ -27,13 +39,13 @@ export function decideCpuAction(state: GameState, playerIndex: number, random = 
 
   if (checkPossible) {
     if (evaluation.category === "veryStrong" && canAggress(legal) && roll < 0.4) {
-      return ensureLegal({ type: "bet", amount: pickBetSize(player.chips, 0, evaluation.score) }, legal);
+      return ensureLegal({ type: "bet", amount: betAmount }, legal);
     }
     if (evaluation.category === "strong" && canAggress(legal) && roll < 0.25) {
-      return ensureLegal({ type: "bet", amount: pickBetSize(player.chips, 0, evaluation.score) }, legal);
+      return ensureLegal({ type: "bet", amount: betAmount }, legal);
     }
     if (evaluation.category === "medium" && canAggress(legal) && roll < 0.05) {
-      return ensureLegal({ type: "bet", amount: BET_OPTIONS[0] }, legal);
+      return ensureLegal({ type: "bet", amount: getMinBet(BIG_BLIND) }, legal);
     }
     return ensureLegal({ type: "check" }, legal);
   }
@@ -43,7 +55,7 @@ export function decideCpuAction(state: GameState, playerIndex: number, random = 
   }
 
   if (canRaise && shouldRaise(evaluation.category, pressure, roll)) {
-    return ensureLegal({ type: "raise", amount: pickBetSize(player.chips, toCall, evaluation.score) }, legal);
+    return ensureLegal({ type: "raise", amount: raiseToAmount }, legal);
   }
 
   if (hasAction(legal, "call")) {
@@ -140,18 +152,33 @@ function shouldAllIn(state: GameState, playerIndex: number, evaluation: CpuHandE
   return false;
 }
 
-function pickBetSize(chips: number, toCall: number, score: number): number {
-  const affordable = BET_OPTIONS.filter((amount) => chips > toCall + amount);
-  if (affordable.length === 0) return Math.min(BET_OPTIONS[0], Math.max(0, chips - toCall));
-  if (score > 0.85) return affordable[Math.min(1, affordable.length - 1)];
-  return affordable[0];
+function pickBetSize(state: GameState, playerIndex: number, score: number): number {
+  const player = state.players[playerIndex];
+  const minBet = getMinBet(BIG_BLIND);
+  const maxBet = getMaxBetAmount(player);
+  const presets: WagerPreset[] = score > 0.85 ? ["min", "half-pot", "pot"] : ["min", "half-pot"];
+  const amounts = presets.map((preset) => calculatePresetBetAmount(preset, state.pot, minBet, maxBet, BIG_BLIND));
+  return amounts[Math.min(score > 0.85 ? 1 : 0, amounts.length - 1)] ?? Math.min(minBet, maxBet);
+}
+
+function pickRaiseToAmount(state: GameState, playerIndex: number, score: number): number {
+  const player = state.players[playerIndex];
+  const callAmount = getCallAmount(state.currentBet, player);
+  const minRaiseTo = getMinRaiseTo(state.currentBet, state.lastFullRaiseAmount);
+  const maxRaiseTo = getMaxRaiseTo(player);
+  const presets: WagerPreset[] = score > 0.85 ? ["min", "half-pot", "pot"] : ["min", "half-pot"];
+  const amounts = presets
+    .map((preset) => calculatePresetRaiseToAmount(preset, state.pot, state.currentBet, callAmount, minRaiseTo, maxRaiseTo, BIG_BLIND))
+    .filter((amount) => amount >= minRaiseTo && amount <= maxRaiseTo);
+  if (score > 0.92 && maxRaiseTo >= minRaiseTo && state.pot > player.chips * 0.75) return maxRaiseTo;
+  return amounts[Math.min(score > 0.85 ? 1 : 0, amounts.length - 1)] ?? minRaiseTo;
 }
 
 function ensureLegal(preferred: GameAction, legal: GameAction[]): GameAction {
   const exact = legal.find((action) => action.type === preferred.type && (preferred.amount === undefined || action.amount === preferred.amount));
   if (exact) return preferred;
   const sameType = legal.find((action) => action.type === preferred.type);
-  if (sameType) return sameType;
+  if (sameType) return preferred.amount === undefined ? sameType : preferred;
   return legal.find((action) => action.type === "check") ?? legal.find((action) => action.type === "call") ?? legal.find((action) => action.type === "fold") ?? { type: "fold" };
 }
 

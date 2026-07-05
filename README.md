@@ -43,6 +43,10 @@ npm test
 - 人間1人 + CPU4人の5人テーブル
 - Dealer Button / Small Blind / Big Blind
 - Check / Call / Bet / Raise / Fold / All-in
+- Raiseは「追加でいくら」ではなく `Raise to` 方式
+- Bet / Raise額は自由入力ではなく `+ / -` ボタンで調整
+- `Min` / `1/2 Pot` / `Pot` / `All-in` の金額プリセット
+- Big Blind基準のミニマムBet / ミニマムRaise
 - ホールカード、コミュニティカード、ポット、チップ、コミット額の表示
 - CPUカードは通常裏向き、ショーダウン時は表向き
 - 7枚から最強5枚を選ぶ役判定
@@ -53,11 +57,23 @@ npm test
 - ゲームログ表示
 - 人間プレイヤー敗退時のゲームオーバーとリスタート
 
+## ベット / レイズ仕様
+
+Betは現在のベットラウンドで誰もBetしていない場合に行えます。最小BetはBig Blind相当です。残チップが最小Bet未満の場合は、最小Bet未満でもAll-in Betとして実行できます。
+
+Raiseは `Raise to` 方式です。たとえばCurrent Betが80で `Raise to 160` を選んだ場合、そのプレイヤーのラウンド内コミット額が160になるように追加チップを支払います。
+
+ミニマムRaiseは、現在の最大Bet額に最後の正式なBet/Raise幅を足した額です。プリフロップではBig Blindを最後の正式Raise幅として扱うため、Small Blind 10 / Big Blind 20 の場合、最小Raise toは40です。
+
+Bet / Raise額は自由入力欄ではなく、`--` / `-` / `+` / `++` と `Min` / `1/2 Pot` / `Pot` / `All-in` ボタンで調整します。通常の増減はBig Blind単位、大きめの増減はBig Blindの5倍です。`1/2 Pot` と `Pot` はNo Limit用の便利ボタンで、厳密なPot Limit計算ではありません。
+
+All-inはミニマムBet / Raise未満でも可能です。All-inが現在Bet以下ならAll-in Call、現在Betを上回るがミニマムRaise未満ならUnder Raise All-in、ミニマムRaise以上ならFull Raise All-inとして扱います。Full Raise All-inだけが最後の正式Raise幅を更新し、他プレイヤーのアクションを再オープンします。Under Raise All-inでは現在の最大Bet額は上がりますが、最後の正式Raise幅は更新しません。
+
 ## 現時点で簡略化している仕様
 
 - サイドポットは実装済みです。複数All-in時はMain Pot / Side Potを分け、Potごとにeligible playerのみで勝者判定します。
 - 同点時はPotごとに均等分割します。端数チップは現在のシート順で前の勝者から1チップずつ配ります。
-- No Limit風の選択式ベット額を維持しているため、厳密なミニマムレイズやベット再オープンルールは簡略化しています。
+- ベット再オープンは、正式なFull Raiseのみ他Activeプレイヤーへ再アクションを回す簡略実装です。Under Raise All-in済みプレイヤーには再度アクションを回しません。
 - CPUはルールベースです。プリフロップのざっくりした手札評価、ポストフロップの成立役とドローをもとに行動します。
 - localStorage保存は未対応です。リロードすると最初からになります。
 

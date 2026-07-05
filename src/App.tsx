@@ -3,6 +3,7 @@ import { cardLabel, type Card } from "./lib/cards";
 import { decideCpuAction } from "./lib/cpu";
 import {
   applyPlayerAction,
+  BIG_BLIND,
   createInitialGame,
   getLegalActions,
   playerBestHand,
@@ -12,6 +13,21 @@ import {
   type GameState,
   type Player,
 } from "./lib/game";
+import {
+  adjustWagerAmount,
+  calculatePresetBetAmount,
+  calculatePresetRaiseToAmount,
+  classifyAllInAction,
+  getCallAmount,
+  getMaxBetAmount,
+  getMaxRaiseTo,
+  getMinBet,
+  getMinRaiseTo,
+  validateBetAmount,
+  validateRaiseToAmount,
+  type AllInActionKind,
+  type WagerPreset,
+} from "./lib/wager";
 
 const humanIndex = 0;
 
@@ -48,7 +64,7 @@ export default function App() {
       <header className="topbar">
         <div>
           <h1>Texas Hold'em</h1>
-          <p>5人テーブル / No Limit風 選択式ベット</p>
+          <p>5人テーブル / No Limit Raise to</p>
         </div>
         <div className="summary">
           <span>Hand {game.handNumber}</span>
@@ -96,11 +112,7 @@ export default function App() {
           ) : game.currentPlayerIndex === null ? (
             <button onClick={nextHand}>Next Hand</button>
           ) : currentPlayer?.isHuman ? (
-            legalActions.map((action, index) => (
-              <button key={`${action.type}-${action.amount ?? index}`} onClick={() => dispatch(action)}>
-                {actionLabel(action)}
-              </button>
-            ))
+            <HumanActionControls game={game} player={currentPlayer} legalActions={legalActions} onAction={dispatch} />
           ) : (
             <span className="waiting">CPU thinking...</span>
           )}
@@ -117,6 +129,120 @@ export default function App() {
       </section>
     </main>
   );
+}
+
+function HumanActionControls({ game, player, legalActions, onAction }: { game: GameState; player: Player; legalActions: GameAction[]; onAction: (action: GameAction) => void }) {
+  const actionTypes = legalActions.map((action) => action.type);
+  const canBet = actionTypes.includes("bet");
+  const canRaise = actionTypes.includes("raise");
+  const mode = canBet ? "bet" : canRaise ? "raise" : "none";
+  const callAmount = getCallAmount(game.currentBet, player);
+  const minBet = getMinBet(BIG_BLIND);
+  const maxBet = getMaxBetAmount(player);
+  const minRaiseTo = getMinRaiseTo(game.currentBet, game.lastFullRaiseAmount);
+  const maxRaiseTo = getMaxRaiseTo(player);
+  const initialAmount = mode === "bet" ? (maxBet < minBet ? maxBet : minBet) : mode === "raise" ? (maxRaiseTo < minRaiseTo ? maxRaiseTo : minRaiseTo) : 0;
+  const [amount, setAmount] = useState(initialAmount);
+  const smallStep = BIG_BLIND;
+  const largeStep = BIG_BLIND * 5;
+
+  useEffect(() => {
+    setAmount(initialAmount);
+  }, [initialAmount, mode, game.currentBet, game.lastFullRaiseAmount, player.chips, player.roundBet]);
+
+  const validation =
+    mode === "bet"
+      ? validateBetAmount(amount, minBet, player)
+      : mode === "raise"
+        ? validateRaiseToAmount(amount, game.currentBet, minRaiseTo, player)
+        : { valid: false, reason: undefined as string | undefined };
+  const allInKind = mode === "raise" ? classifyAllInAction(amount, game.currentBet, minRaiseTo, maxRaiseTo) : validation.allInKind ?? "none";
+  const minAmount = mode === "bet" ? (maxBet < minBet ? maxBet : minBet) : maxRaiseTo < minRaiseTo ? maxRaiseTo : minRaiseTo;
+  const maxAmount = mode === "bet" ? maxBet : maxRaiseTo;
+
+  function setPreset(preset: WagerPreset) {
+    if (mode === "bet") {
+      setAmount(calculatePresetBetAmount(preset, game.pot, minBet, maxBet, BIG_BLIND));
+    } else if (mode === "raise") {
+      setAmount(calculatePresetRaiseToAmount(preset, game.pot, game.currentBet, callAmount, minRaiseTo, maxRaiseTo, BIG_BLIND));
+    }
+  }
+
+  function changeBy(delta: number) {
+    setAmount((current) => adjustWagerAmount(current, delta, minAmount, maxAmount));
+  }
+
+  function submitWager() {
+    if (!validation.valid) return;
+    if (mode === "bet") onAction({ type: "bet", amount });
+    if (mode === "raise") onAction({ type: "raise", amount });
+  }
+
+  return (
+    <div className="actionPanel">
+      <div className="quickActions">
+        {actionTypes.includes("check") && <button onClick={() => onAction({ type: "check" })}>Check</button>}
+        {actionTypes.includes("call") && <button onClick={() => onAction({ type: "call" })}>Call {Math.min(callAmount, player.chips)}</button>}
+        {actionTypes.includes("all-in") && <button onClick={() => onAction({ type: "all-in" })}>All-in</button>}
+        {actionTypes.includes("fold") && <button onClick={() => onAction({ type: "fold" })}>Fold</button>}
+      </div>
+
+      {mode !== "none" && (
+        <div className="wagerControl">
+          <div className="wagerStats">
+            <Stat label="Pot" value={game.pot} />
+            <Stat label="Current Bet" value={game.currentBet} />
+            {mode === "raise" && <Stat label="To Call" value={callAmount} />}
+            <Stat label={mode === "bet" ? "Min Bet" : "Min Raise To"} value={mode === "bet" ? minBet : minRaiseTo} />
+            <Stat label={mode === "bet" ? "Max Bet" : "Max Raise To"} value={mode === "bet" ? maxBet : maxRaiseTo} />
+            <Stat label="Your Chips" value={player.chips} />
+          </div>
+
+          <div className="amountDisplay">
+            <span>{mode === "bet" ? "Selected Bet" : "Selected Raise To"}</span>
+            <strong>{amount}</strong>
+            {mode === "raise" && <em>Additional {Math.max(0, amount - player.roundBet)}</em>}
+            {allInKind !== "none" && <em className="allInNote">{allInLabel(allInKind)}</em>}
+          </div>
+
+          <div className="stepButtons">
+            <button onClick={() => changeBy(-largeStep)}>--</button>
+            <button onClick={() => changeBy(-smallStep)}>-</button>
+            <button onClick={() => changeBy(smallStep)}>+</button>
+            <button onClick={() => changeBy(largeStep)}>++</button>
+          </div>
+
+          <div className="presetButtons">
+            <button onClick={() => setPreset("min")}>Min</button>
+            <button onClick={() => setPreset("half-pot")}>1/2 Pot</button>
+            <button onClick={() => setPreset("pot")}>Pot</button>
+            <button onClick={() => setPreset("all-in")}>All-in</button>
+          </div>
+
+          {!validation.valid && validation.reason && <p className="errorText">{validation.reason}</p>}
+          <button className="primaryAction" disabled={!validation.valid} onClick={submitWager}>
+            {mode === "bet" ? "Bet" : "Raise"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: number }) {
+  return (
+    <div>
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function allInLabel(kind: AllInActionKind): string {
+  if (kind === "all-in-call") return "All-in Call";
+  if (kind === "all-in-under-raise") return "Under Raise All-in";
+  if (kind === "all-in-full-raise") return "Full Raise All-in";
+  return "";
 }
 
 function PotBreakdown({ game }: { game: GameState }) {
@@ -186,12 +312,6 @@ function CardView({ card, hidden }: { card?: Card; hidden?: boolean }) {
   }
   const red = card.suit === "hearts" || card.suit === "diamonds";
   return <span className={`card ${red ? "red" : "black"}`}>{cardLabel(card)}</span>;
-}
-
-function actionLabel(action: GameAction): string {
-  const suffix = action.amount ? ` ${action.amount}` : "";
-  if (action.type === "all-in") return "All-in";
-  return `${action.type[0].toUpperCase()}${action.type.slice(1)}${suffix}`;
 }
 
 function stageLabel(stage: GameState["stage"]): string {

@@ -1,6 +1,14 @@
 import { createDeck, drawCards, shuffleDeck, type Card } from "./cards";
 import { evaluateBestHand, type HandEvaluation } from "./handEvaluator";
 import { calculatePots, resolvePots, type Pot, type PotAward } from "./pots";
+import {
+  getMaxRaiseTo,
+  getMinBet,
+  getMinRaiseTo,
+  validateBetAmount,
+  validateRaiseToAmount,
+  type AllInActionKind,
+} from "./wager";
 
 export type PlayerStatus = "Active" | "Folded" | "All-in" | "Eliminated";
 export type Stage = "preflop" | "flop" | "turn" | "river" | "showdown" | "handOver" | "gameOver";
@@ -36,6 +44,7 @@ export interface GameState {
   lastEvaluations: Record<string, HandEvaluation>;
   showdown: boolean;
   roundRaiseCount: number;
+  lastFullRaiseAmount: number;
 }
 
 export interface GameAction {
@@ -46,7 +55,6 @@ export interface GameAction {
 export const INITIAL_CHIPS = 1000;
 export const SMALL_BLIND = 10;
 export const BIG_BLIND = 20;
-export const BET_OPTIONS = [10, 25, 50];
 export const MAX_RAISES_PER_ROUND = 2;
 
 export function createInitialGame(): GameState {
@@ -79,6 +87,7 @@ export function createInitialGame(): GameState {
     lastEvaluations: {},
     showdown: false,
     roundRaiseCount: 0,
+    lastFullRaiseAmount: BIG_BLIND,
   });
 }
 
@@ -137,6 +146,7 @@ export function startHand(previous: GameState): GameState {
     lastEvaluations: {},
     showdown: false,
     roundRaiseCount: 0,
+    lastFullRaiseAmount: BIG_BLIND,
     logs: [
       `Hand ${previous.handNumber + 1} started. ${players[smallBlindIndex].name} posts SB ${SMALL_BLIND}, ${players[bigBlindIndex].name} posts BB ${BIG_BLIND}.`,
       ...previous.logs,
@@ -150,25 +160,18 @@ export function getLegalActions(state: GameState, playerIndex: number): GameActi
 
   const toCall = Math.max(0, state.currentBet - player.roundBet);
   const actions: GameAction[] = [];
-  if (toCall === 0) {
+  const maxRaiseTo = getMaxRaiseTo(player);
+  if (state.currentBet === 0) {
     actions.push({ type: "check" });
-    for (const amount of BET_OPTIONS) {
-      if (player.chips > 0) actions.push({ type: "bet", amount: Math.min(amount, player.chips) });
-    }
+    if (player.chips > 0) actions.push({ type: "bet" });
   } else {
-    actions.push({ type: "call" });
-    if (state.roundRaiseCount < MAX_RAISES_PER_ROUND) {
-      for (const amount of BET_OPTIONS) {
-        if (player.chips > toCall) actions.push({ type: "raise", amount });
-      }
-    }
+    if (toCall === 0) actions.push({ type: "check" });
+    else actions.push({ type: "call" });
+    if (maxRaiseTo > state.currentBet) actions.push({ type: "raise" });
   }
-  const allInWouldRaise = toCall > 0 && player.chips > toCall;
-  if (!(allInWouldRaise && state.roundRaiseCount >= MAX_RAISES_PER_ROUND)) {
-    actions.push({ type: "all-in" });
-  }
+  if (player.chips > 0) actions.push({ type: "all-in" });
   actions.push({ type: "fold" });
-  return dedupeActions(actions, player.chips, toCall);
+  return dedupeActions(actions);
 }
 
 export function applyPlayerAction(state: GameState, playerIndex: number, action: GameAction): GameState {
@@ -178,6 +181,7 @@ export function applyPlayerAction(state: GameState, playerIndex: number, action:
   const logs = [...state.logs];
   let currentBet = state.currentBet;
   let roundRaiseCount = state.roundRaiseCount;
+  let lastFullRaiseAmount = state.lastFullRaiseAmount;
 
   if (!isActionable(player)) return state;
 
@@ -195,43 +199,65 @@ export function applyPlayerAction(state: GameState, playerIndex: number, action:
     player.acted = true;
     logs.unshift(`${player.name} ${player.status === "All-in" ? "calls all-in" : "calls"} ${paid}.`);
   } else if (action.type === "bet" && toCall === 0) {
-    const paid = commitChips(player, action.amount ?? 0);
+    const amount = action.amount ?? 0;
+    const minBet = getMinBet(BIG_BLIND);
+    const validation = validateBetAmount(amount, minBet, player);
+    if (!validation.valid) return state;
+    const wasAllIn = amount === player.chips;
+    const paid = commitChips(player, amount);
     if (player.roundBet > currentBet) {
+      const fullBet = player.roundBet >= minBet;
       currentBet = player.roundBet;
-      resetOtherActors(players, playerIndex);
-    }
-    player.acted = true;
-    logs.unshift(`${player.name} ${player.status === "All-in" ? "bets all-in" : "bets"} ${paid}.`);
-  } else if (action.type === "raise" && toCall > 0) {
-    if (roundRaiseCount >= MAX_RAISES_PER_ROUND) {
-      return state;
-    }
-    const target = currentBet + (action.amount ?? 0);
-    const paid = commitChips(player, target - player.roundBet);
-    if (player.roundBet > currentBet) {
-      currentBet = player.roundBet;
-      roundRaiseCount += 1;
-      player.raisedThisRound = true;
-      resetOtherActors(players, playerIndex);
-    }
-    player.acted = true;
-    logs.unshift(`${player.name} ${player.status === "All-in" ? "raises all-in" : "raises"} ${paid}.`);
-  } else if (action.type === "all-in") {
-    const before = player.roundBet;
-    const paid = commitChips(player, player.chips);
-    if (player.roundBet > currentBet) {
-      if (toCall > 0 && roundRaiseCount >= MAX_RAISES_PER_ROUND) {
-        return state;
-      }
-      currentBet = player.roundBet;
-      if (toCall > 0) {
+      if (fullBet) {
+        lastFullRaiseAmount = player.roundBet;
         roundRaiseCount += 1;
         player.raisedThisRound = true;
+        resetOtherActors(players, playerIndex);
       }
-      resetOtherActors(players, playerIndex);
     }
     player.acted = true;
-    logs.unshift(`${player.name} goes all-in for ${paid}${before < state.currentBet ? " total call/raise" : ""}.`);
+    logs.unshift(`${player.name} ${wasAllIn ? "bets all-in" : "bets"} ${paid}.`);
+    if (wasAllIn && player.roundBet < minBet) logs.unshift(`${player.name}'s all-in is below the minimum bet.`);
+  } else if (action.type === "raise" && currentBet > 0) {
+    const target = action.amount ?? 0;
+    const minRaiseTo = getMinRaiseTo(currentBet, lastFullRaiseAmount);
+    const validation = validateRaiseToAmount(target, currentBet, minRaiseTo, player);
+    if (!validation.valid) return state;
+    const previousCurrentBet = currentBet;
+    commitChips(player, target - player.roundBet);
+    if (player.roundBet > currentBet) {
+      currentBet = player.roundBet;
+      if (validation.allInKind !== "all-in-under-raise") {
+        lastFullRaiseAmount = currentBet - previousCurrentBet;
+        roundRaiseCount += 1;
+        player.raisedThisRound = true;
+        resetOtherActors(players, playerIndex);
+      }
+    }
+    player.acted = true;
+    logs.unshift(`${player.name} ${player.status === "All-in" ? "raises all-in to" : "raises to"} ${player.roundBet}.`);
+    if (validation.allInKind === "all-in-under-raise") logs.unshift(`${player.name}'s all-in is not a full raise.`);
+    if (validation.allInKind === "all-in-full-raise") logs.unshift(`${player.name}'s all-in is a full raise.`);
+  } else if (action.type === "all-in") {
+    const beforeCurrentBet = currentBet;
+    const target = player.roundBet + player.chips;
+    const minRaiseTo = currentBet > 0 ? getMinRaiseTo(currentBet, lastFullRaiseAmount) : getMinBet(BIG_BLIND);
+    const allInKind = classifyAllInForGame(target, currentBet, minRaiseTo);
+    const paid = commitChips(player, player.chips);
+    if (player.roundBet > currentBet) {
+      currentBet = player.roundBet;
+      if (allInKind === "all-in-full-raise") {
+        lastFullRaiseAmount = currentBet - beforeCurrentBet;
+        roundRaiseCount += 1;
+        player.raisedThisRound = true;
+        resetOtherActors(players, playerIndex);
+      }
+    }
+    player.acted = true;
+    logs.unshift(`${player.name} goes all-in to ${player.roundBet} for ${paid}.`);
+    if (allInKind === "all-in-call") logs.unshift(`${player.name}'s all-in is a call.`);
+    if (allInKind === "all-in-under-raise") logs.unshift(`${player.name}'s all-in is not a full raise.`);
+    if (allInKind === "all-in-full-raise") logs.unshift(`${player.name}'s all-in is a full raise.`);
   }
 
   const pots = calculatePots(players);
@@ -242,6 +268,7 @@ export function applyPlayerAction(state: GameState, playerIndex: number, action:
     players,
     currentBet,
     roundRaiseCount,
+    lastFullRaiseAmount,
     pot: sumPots(pots),
     pots,
     logs,
@@ -300,7 +327,7 @@ function advanceStage(state: GameState): GameState {
   }
 
   const next = nextActionableIndex(players, state.dealerIndex);
-  return continueGame({ ...state, players, deck, communityCards, stage, currentBet: 0, currentPlayerIndex: next, roundRaiseCount: 0, logs });
+  return continueGame({ ...state, players, deck, communityCards, stage, currentBet: 0, currentPlayerIndex: next, roundRaiseCount: 0, lastFullRaiseAmount: BIG_BLIND, logs });
 }
 
 function showdown(state: GameState): GameState {
@@ -446,17 +473,21 @@ function eligibleIndexes(players: Player[], startIndex: number): number[] {
     .filter((index) => players[index].chips > 0);
 }
 
-function dedupeActions(actions: GameAction[], chips: number, toCall: number): GameAction[] {
+function dedupeActions(actions: GameAction[]): GameAction[] {
   const seen = new Set<string>();
   return actions
-    .filter((action) => action.type !== "bet" || (action.amount ?? 0) > 0)
-    .filter((action) => action.type !== "raise" || chips > toCall)
     .filter((action) => {
       const key = `${action.type}:${action.amount ?? 0}`;
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
     });
+}
+
+function classifyAllInForGame(target: number, currentBet: number, minRaiseTo: number): AllInActionKind {
+  if (target <= currentBet) return "all-in-call";
+  if (target < minRaiseTo) return "all-in-under-raise";
+  return "all-in-full-raise";
 }
 
 function formatCard(card: Card): string {

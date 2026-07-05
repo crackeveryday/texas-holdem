@@ -29,6 +29,11 @@ button:hover {
   background: #f7d154;
 }
 
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .app {
   margin: 0 auto;
   max-width: 1280px;
@@ -66,6 +71,94 @@ h2 {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.actionPanel {
+  display: grid;
+  gap: 12px;
+  width: min(720px, 100%);
+}
+
+.quickActions,
+.stepButtons,
+.presetButtons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.wagerControl {
+  border: 1px solid #d2cab8;
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+}
+
+.wagerStats {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.wagerStats div {
+  background: #f3f0e8;
+  border-radius: 6px;
+  display: flex;
+  justify-content: space-between;
+  min-width: 0;
+  padding: 8px 10px;
+}
+
+.wagerStats span,
+.amountDisplay span {
+  color: #59635c;
+}
+
+.amountDisplay {
+  align-items: center;
+  background: #17201a;
+  border-radius: 8px;
+  color: #fffdf7;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 12px;
+}
+
+.amountDisplay span {
+  color: #dce5dd;
+}
+
+.amountDisplay strong {
+  font-size: 28px;
+}
+
+.amountDisplay em {
+  font-style: normal;
+  font-weight: 700;
+}
+
+.allInNote {
+  background: #f7d154;
+  border-radius: 999px;
+  color: #17201a;
+  padding: 4px 8px;
+}
+
+.errorText {
+  color: #b7242f;
+  font-weight: 800;
+}
+
+.primaryAction {
+  background: #2e7355;
+  border-color: #2e7355;
+  color: #fffdf7;
+}
+
+.primaryAction:hover {
+  background: #266047;
 }
 
 .summary span,
@@ -233,5 +326,9 @@ dd {
 
   .players {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .wagerStats {
+    grid-template-columns: 1fr;
   }
 }

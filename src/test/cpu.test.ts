@@ -100,6 +100,7 @@ describe("CPU action selection", () => {
     );
     const action = decideCpuAction(state, 1, () => 0.2);
     expect(action.type).toBe("raise");
+    expect(action.amount).toBeGreaterThanOrEqual(40);
   });
 
   it("does not use all-in for ordinary strong hands by default", () => {

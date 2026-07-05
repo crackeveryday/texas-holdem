@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseCard } from "../lib/cards";
-import { applyPlayerAction, createInitialGame, getLegalActions, MAX_RAISES_PER_ROUND, type GameState } from "../lib/game";
+import { applyPlayerAction, BIG_BLIND, createInitialGame, getLegalActions, type GameState } from "../lib/game";
 import { calculatePots } from "../lib/pots";
 
 const c = (cards: string) => cards.split(" ").map(parseCard);
@@ -45,11 +45,11 @@ describe("game betting", () => {
     expect(next.pot).toBe(100);
   });
 
-  it("hides raise actions after the round raise cap", () => {
-    const state = { ...forceHumanTurn(createInitialGame()), roundRaiseCount: MAX_RAISES_PER_ROUND };
+  it("lists raise to as an action type when a full raise is possible", () => {
+    const state = { ...forceHumanTurn(createInitialGame()), roundRaiseCount: 99, lastFullRaiseAmount: BIG_BLIND };
     const actions = getLegalActions(state, 0).map((action) => action.type);
-    expect(actions).not.toContain("raise");
-    expect(actions).not.toContain("all-in");
+    expect(actions).toContain("raise");
+    expect(actions).toContain("all-in");
     expect(actions).toContain("call");
   });
 
@@ -119,5 +119,86 @@ describe("game betting", () => {
     expect(next.communityCards).toHaveLength(5);
     expect(next.showdown).toBe(true);
     expect(next.players.reduce((total, player) => total + player.chips, 0)).toBe(totalChips(forced));
+  });
+
+  it("reopens action after a full raise", () => {
+    const state = createInitialGame();
+    const players = state.players.map((player, index) => ({
+      ...player,
+      chips: index <= 2 ? 900 : player.chips,
+      status: index <= 2 ? ("Active" as const) : ("Folded" as const),
+      acted: index === 0 ? false : true,
+      roundBet: index <= 2 ? 100 : 0,
+      committed: index <= 2 ? 100 : 0,
+    }));
+    const forced = {
+      ...state,
+      players,
+      currentPlayerIndex: 0,
+      currentBet: 100,
+      lastFullRaiseAmount: 50,
+      pot: 300,
+      pots: calculatePots(players),
+    };
+
+    const next = applyPlayerAction(forced, 0, { type: "raise", amount: 160 });
+
+    expect(next.currentBet).toBe(160);
+    expect(next.lastFullRaiseAmount).toBe(60);
+    expect(next.players[1].acted).toBe(false);
+    expect(next.players[2].acted).toBe(false);
+  });
+
+  it("does not update lastFullRaiseAmount for an under raise all-in", () => {
+    const state = createInitialGame();
+    const players = state.players.map((player, index) => ({
+      ...player,
+      chips: index === 0 ? 30 : 900,
+      status: index <= 2 ? ("Active" as const) : ("Folded" as const),
+      acted: index === 0 ? false : true,
+      roundBet: index <= 2 ? 100 : 0,
+      committed: index <= 2 ? 100 : 0,
+    }));
+    const forced = {
+      ...state,
+      players,
+      currentPlayerIndex: 0,
+      currentBet: 100,
+      lastFullRaiseAmount: 50,
+      pot: 300,
+      pots: calculatePots(players),
+    };
+
+    const next = applyPlayerAction(forced, 0, { type: "all-in" });
+
+    expect(next.players[0]).toMatchObject({ status: "All-in", roundBet: 130 });
+    expect(next.currentBet).toBe(130);
+    expect(next.lastFullRaiseAmount).toBe(50);
+  });
+
+  it("does not ask an all-in player to act again", () => {
+    const state = createInitialGame();
+    const players = state.players.map((player, index) => ({
+      ...player,
+      chips: index === 0 ? 30 : 900,
+      status: index <= 2 ? ("Active" as const) : ("Folded" as const),
+      acted: index === 0 ? false : true,
+      roundBet: index <= 2 ? 100 : 0,
+      committed: index <= 2 ? 100 : 0,
+    }));
+    const forced = {
+      ...state,
+      players,
+      currentPlayerIndex: 0,
+      currentBet: 100,
+      lastFullRaiseAmount: 50,
+      pot: 300,
+      pots: calculatePots(players),
+    };
+
+    const next = applyPlayerAction(forced, 0, { type: "all-in" });
+
+    expect(next.players[0].status).toBe("All-in");
+    expect(next.currentPlayerIndex).not.toBe(0);
   });
 });
