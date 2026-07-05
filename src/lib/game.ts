@@ -1,6 +1,6 @@
 import { createDeck, drawCards, shuffleDeck, type Card } from "./cards";
 import { evaluateBestHand, type HandEvaluation } from "./handEvaluator";
-import { determineWinners } from "./winner";
+import { calculatePots, resolvePots, type Pot, type PotAward } from "./pots";
 
 export type PlayerStatus = "Active" | "Folded" | "All-in" | "Eliminated";
 export type Stage = "preflop" | "flop" | "turn" | "river" | "showdown" | "handOver" | "gameOver";
@@ -30,6 +30,7 @@ export interface GameState {
   currentPlayerIndex: number | null;
   currentBet: number;
   pot: number;
+  pots: Pot[];
   handNumber: number;
   logs: string[];
   lastEvaluations: Record<string, HandEvaluation>;
@@ -72,6 +73,7 @@ export function createInitialGame(): GameState {
     currentPlayerIndex: null,
     currentBet: 0,
     pot: 0,
+    pots: [],
     handNumber: 0,
     logs: [],
     lastEvaluations: {},
@@ -115,6 +117,7 @@ export function startHand(previous: GameState): GameState {
   postBlind(players[smallBlindIndex], SMALL_BLIND);
   postBlind(players[bigBlindIndex], BIG_BLIND);
   const currentPlayerIndex = nextActionableIndex(players, bigBlindIndex);
+  const pots = calculatePots(players);
   const pot = calculatePot(players);
 
   return {
@@ -129,6 +132,7 @@ export function startHand(previous: GameState): GameState {
     currentPlayerIndex,
     currentBet: Math.max(players[bigBlindIndex].roundBet, players[smallBlindIndex].roundBet),
     pot,
+    pots,
     handNumber: previous.handNumber + 1,
     lastEvaluations: {},
     showdown: false,
@@ -178,6 +182,7 @@ export function applyPlayerAction(state: GameState, playerIndex: number, action:
   if (!isActionable(player)) return state;
 
   const toCall = Math.max(0, currentBet - player.roundBet);
+  const previousPots = state.pots;
   if (action.type === "fold") {
     player.status = "Folded";
     player.acted = true;
@@ -229,12 +234,16 @@ export function applyPlayerAction(state: GameState, playerIndex: number, action:
     logs.unshift(`${player.name} goes all-in for ${paid}${before < state.currentBet ? " total call/raise" : ""}.`);
   }
 
+  const pots = calculatePots(players);
+  logs.unshift(...sidePotCreationLogs(previousPots, pots));
+
   return continueGame({
     ...state,
     players,
     currentBet,
     roundRaiseCount,
-    pot: calculatePot(players),
+    pot: sumPots(pots),
+    pots,
     logs,
   });
 }
@@ -252,7 +261,7 @@ function continueGame(state: GameState): GameState {
   if (livePlayers.length === 1) {
     return awardSingleWinner(state, livePlayers[0].id);
   }
-  if (allRemainingAllIn(state.players)) {
+  if (allRemainingAllIn(state.players) || onlyOneActionablePlayerRemains(state.players)) {
     return showdown(revealRemainingBoard(state));
   }
   if (bettingRoundComplete(state)) {
@@ -295,34 +304,36 @@ function advanceStage(state: GameState): GameState {
 }
 
 function showdown(state: GameState): GameState {
-  const result = determineWinners(
-    state.players.map((player) => ({ id: player.id, holeCards: player.holeCards, folded: player.status === "Folded" || player.status === "Eliminated" })),
-    state.communityCards,
-  );
-  const players = payWinners(state.players, result.winners, state.pot);
-  const winnerNames = result.winners.map((id) => players.find((player) => player.id === id)?.name).join(", ");
-  const bestHand = result.evaluations[result.winners[0]].name;
+  const pots = calculatePots(state.players);
+  const result = resolvePots(pots, state.players, state.communityCards, state.players.map((player) => player.id));
+  const players = applyPayouts(state.players, result.payouts);
   return finishHand({
     ...state,
     players,
+    pots,
+    pot: sumPots(pots),
     stage: "showdown",
     currentPlayerIndex: null,
     lastEvaluations: result.evaluations,
     showdown: true,
-    logs: [`Showdown: ${winnerNames} win ${state.pot} with ${bestHand}.`, ...state.logs],
+    logs: [...showdownLogs(result.awards, players), ...state.logs],
   });
 }
 
 function awardSingleWinner(state: GameState, winnerId: string): GameState {
-  const players = payWinners(state.players, [winnerId], state.pot);
+  const pots = calculatePots(state.players);
+  const totalPot = sumPots(pots);
+  const players = payWinners(state.players, [winnerId], totalPot);
   const winner = players.find((player) => player.id === winnerId)!;
   return finishHand({
     ...state,
     players,
+    pots,
+    pot: totalPot,
     stage: "handOver",
     currentPlayerIndex: null,
     showdown: false,
-    logs: [`${winner.name} wins ${state.pot}; everyone else folded.`, ...state.logs],
+    logs: [`${winner.name} wins ${totalPot}; everyone else folded.`, ...state.logs],
   });
 }
 
@@ -366,6 +377,10 @@ function payWinners(players: Player[], winnerIds: string[], pot: number): Player
   });
 }
 
+function applyPayouts(players: Player[], payouts: Record<string, number>): Player[] {
+  return players.map((player) => ({ ...player, chips: player.chips + (payouts[player.id] ?? 0) }));
+}
+
 function postBlind(player: Player, amount: number): void {
   commitChips(player, amount);
   player.acted = false;
@@ -395,6 +410,18 @@ function bettingRoundComplete(state: GameState): boolean {
 
 function allRemainingAllIn(players: Player[]): boolean {
   return players.every((player) => player.status === "Folded" || player.status === "Eliminated" || player.status === "All-in");
+}
+
+function onlyOneActionablePlayerRemains(players: Player[]): boolean {
+  const livePlayers = players.filter((player) => player.status !== "Folded" && player.status !== "Eliminated");
+  const actionablePlayers = livePlayers.filter(isActionable);
+  const currentBet = Math.max(0, ...livePlayers.map((player) => player.roundBet));
+  return (
+    livePlayers.length > 1 &&
+    actionablePlayers.length === 1 &&
+    actionablePlayers[0].roundBet === currentBet &&
+    livePlayers.some((player) => player.status === "All-in")
+  );
 }
 
 function nextEligibleIndex(players: Player[], fromIndex: number): number {
@@ -436,6 +463,29 @@ function formatCard(card: Card): string {
   const rank = card.rank === 14 ? "A" : card.rank === 13 ? "K" : card.rank === 12 ? "Q" : card.rank === 11 ? "J" : String(card.rank);
   const suit = card.suit === "spades" ? "S" : card.suit === "hearts" ? "H" : card.suit === "diamonds" ? "D" : "C";
   return `${rank}${suit}`;
+}
+
+function sumPots(pots: Pot[]): number {
+  return pots.reduce((total, pot) => total + pot.amount, 0);
+}
+
+function sidePotCreationLogs(previousPots: Pot[], pots: Pot[]): string[] {
+  if (pots.length <= previousPots.length) return [];
+  return pots.slice(previousPots.length).map((pot, index) => `${potName(previousPots.length + index)} created: ${pot.amount}.`);
+}
+
+function showdownLogs(awards: PotAward[], players: Player[]): string[] {
+  return awards.map((award) => {
+    const winners = award.winnerIds.map((id) => players.find((player) => player.id === id)?.name ?? id);
+    const shares = award.winnerIds.map((id) => `${players.find((player) => player.id === id)?.name ?? id} +${award.shares[id]}`).join(", ");
+    const split = award.winnerIds.length > 1 ? ` Split: ${shares}.` : ` +${award.shares[award.winnerIds[0]]}.`;
+    const hand = award.handName ? ` with ${award.handName}` : "";
+    return `${potName(award.potIndex)} won by ${winners.join(", ")}${hand}.${split}`;
+  });
+}
+
+function potName(index: number): string {
+  return index === 0 ? "Main Pot" : `Side Pot ${index}`;
 }
 
 export function playerBestHand(player: Player, communityCards: Card[]): HandEvaluation | null {

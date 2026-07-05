@@ -95,6 +95,29 @@ h2 {
   min-height: 132px;
 }
 
+.potBreakdown {
+  display: grid;
+  gap: 6px;
+  margin: 14px auto 0;
+  max-width: 720px;
+}
+
+.potBreakdown div {
+  align-items: center;
+  background: rgba(255, 253, 247, 0.14);
+  border: 1px solid rgba(255, 253, 247, 0.32);
+  border-radius: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  padding: 8px 10px;
+}
+
+.potBreakdown span {
+  color: #edf4ee;
+}
+
 .players {
   display: grid;
   gap: 14px;

@@ -68,6 +68,8 @@ export default function App() {
           </div>
         </div>
 
+        <PotBreakdown game={game} />
+
         <div className="players">
           {game.players.map((player, index) => (
             <PlayerPanel
@@ -114,6 +116,21 @@ export default function App() {
         </ol>
       </section>
     </main>
+  );
+}
+
+function PotBreakdown({ game }: { game: GameState }) {
+  const pots = game.pots.length > 0 ? game.pots : [{ amount: game.pot, eligiblePlayerIds: game.players.filter((player) => player.status !== "Folded").map((player) => player.id) }];
+
+  return (
+    <div className="potBreakdown">
+      {pots.map((pot, index) => (
+        <div key={`${index}-${pot.amount}`}>
+          <strong>{index === 0 ? "Main Pot" : `Side Pot ${index}`}: {pot.amount}</strong>
+          <span>eligible: {pot.eligiblePlayerIds.map((id) => game.players.find((player) => player.id === id)?.name ?? id).join(", ") || "none"}</span>
+        </div>
+      ))}
+    </div>
   );
 }
 
