@@ -4,6 +4,8 @@ React + TypeScript + Vite で作成した、ブラウザ完結型の1人用テ�
 
 人間プレイヤー1人とCPU4人の合計5人テーブルで、プリフロップ、フロップ、ターン、リバー、ショーダウンまで進行できます。
 
+demo: https://crackeveryday.github.io/texas-holdem/
+
 ## 技術スタック
 
 - React
