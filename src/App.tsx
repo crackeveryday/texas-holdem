@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { cardLabel, type Card } from "./lib/cards";
 import { decideCpuAction } from "./lib/cpu";
+import { getCpuActionDelay, sleep } from "./lib/cpuTiming";
 import {
   applyPlayerAction,
   BIG_BLIND,
@@ -33,25 +34,78 @@ const humanIndex = 0;
 
 export default function App() {
   const [game, setGame] = useState<GameState>(() => createInitialGame());
+  const [thinkingPlayerId, setThinkingPlayerId] = useState<string | null>(null);
+  const mountedRef = useRef(false);
+  const pendingCpuActionRef = useRef<string | null>(null);
   const currentPlayer = game.currentPlayerIndex === null ? null : game.players[game.currentPlayerIndex];
   const legalActions = useMemo(() => getLegalActions(game, humanIndex), [game]);
   const humanBest = playerBestHand(game.players[humanIndex], game.communityCards);
+  const isCpuThinking = thinkingPlayerId !== null;
 
   useEffect(() => {
-    if (game.currentPlayerIndex === null) return;
-    const player = game.players[game.currentPlayerIndex];
-    if (player.isHuman || game.stage === "gameOver") return;
-    const timer = window.setTimeout(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const playerIndex = game.currentPlayerIndex;
+    if (playerIndex === null) {
+      pendingCpuActionRef.current = null;
+      if (mountedRef.current) setThinkingPlayerId(null);
+      return;
+    }
+
+    const player = game.players[playerIndex];
+    if (player.isHuman || game.stage === "gameOver") {
+      pendingCpuActionRef.current = null;
+      if (mountedRef.current) setThinkingPlayerId(null);
+      return;
+    }
+
+    const pendingKey = `${game.handNumber}:${game.stage}:${player.id}:${playerIndex}`;
+    let cancelled = false;
+    pendingCpuActionRef.current = pendingKey;
+    if (mountedRef.current) setThinkingPlayerId(player.id);
+
+    async function actAfterThinking() {
+      await sleep(getCpuActionDelay());
+      if (cancelled || pendingCpuActionRef.current !== pendingKey) return;
+
       setGame((current) => {
-        if (current.currentPlayerIndex === null) return current;
-        const cpuAction = decideCpuAction(current, current.currentPlayerIndex);
-        return applyPlayerAction(current, current.currentPlayerIndex, cpuAction);
+        const currentPlayerIndex = current.currentPlayerIndex;
+        if (currentPlayerIndex === null) return current;
+        const currentPlayer = current.players[currentPlayerIndex];
+        if (
+          current.handNumber !== game.handNumber ||
+          current.stage === "gameOver" ||
+          currentPlayerIndex !== playerIndex ||
+          currentPlayer.id !== player.id ||
+          currentPlayer.isHuman ||
+          pendingCpuActionRef.current !== pendingKey
+        ) {
+          return current;
+        }
+
+        const cpuAction = decideCpuAction(current, currentPlayerIndex);
+        return applyPlayerAction(current, currentPlayerIndex, cpuAction);
       });
-    }, 450);
-    return () => window.clearTimeout(timer);
+    }
+
+    void actAfterThinking();
+
+    return () => {
+      cancelled = true;
+      if (pendingCpuActionRef.current === pendingKey) {
+        pendingCpuActionRef.current = null;
+        if (mountedRef.current) setThinkingPlayerId(null);
+      }
+    };
   }, [game]);
 
   function dispatch(action: GameAction) {
+    if (isCpuThinking) return;
     setGame((current) => applyPlayerAction(current, humanIndex, action));
   }
 
@@ -103,7 +157,7 @@ export default function App() {
       <section className="controls">
         <div>
           <h2>Action</h2>
-          <p>{currentPlayer ? `${currentPlayer.name}'s turn` : game.stage === "gameOver" ? "Game over" : "Hand complete"}</p>
+          <p>{actionStatusLabel(currentPlayer, game, thinkingPlayerId)}</p>
           {humanBest && <p>Your best hand: {humanBest.name}</p>}
         </div>
         <div className="buttons">
@@ -112,9 +166,9 @@ export default function App() {
           ) : game.currentPlayerIndex === null ? (
             <button onClick={nextHand}>Next Hand</button>
           ) : currentPlayer?.isHuman ? (
-            <HumanActionControls game={game} player={currentPlayer} legalActions={legalActions} onAction={dispatch} />
+            <HumanActionControls game={game} player={currentPlayer} legalActions={legalActions} disabled={isCpuThinking} onAction={dispatch} />
           ) : (
-            <span className="waiting">CPU thinking...</span>
+            <span className="waiting">{currentPlayer?.name ?? "CPU"} thinking...</span>
           )}
         </div>
       </section>
@@ -131,7 +185,19 @@ export default function App() {
   );
 }
 
-function HumanActionControls({ game, player, legalActions, onAction }: { game: GameState; player: Player; legalActions: GameAction[]; onAction: (action: GameAction) => void }) {
+function HumanActionControls({
+  game,
+  player,
+  legalActions,
+  disabled,
+  onAction,
+}: {
+  game: GameState;
+  player: Player;
+  legalActions: GameAction[];
+  disabled: boolean;
+  onAction: (action: GameAction) => void;
+}) {
   const actionTypes = legalActions.map((action) => action.type);
   const canBet = actionTypes.includes("bet");
   const canRaise = actionTypes.includes("raise");
@@ -173,7 +239,7 @@ function HumanActionControls({ game, player, legalActions, onAction }: { game: G
   }
 
   function submitWager() {
-    if (!validation.valid) return;
+    if (disabled || !validation.valid) return;
     if (mode === "bet") onAction({ type: "bet", amount });
     if (mode === "raise") onAction({ type: "raise", amount });
   }
@@ -181,10 +247,10 @@ function HumanActionControls({ game, player, legalActions, onAction }: { game: G
   return (
     <div className="actionPanel">
       <div className="quickActions">
-        {actionTypes.includes("check") && <button onClick={() => onAction({ type: "check" })}>Check</button>}
-        {actionTypes.includes("call") && <button onClick={() => onAction({ type: "call" })}>Call {Math.min(callAmount, player.chips)}</button>}
-        {actionTypes.includes("all-in") && <button onClick={() => onAction({ type: "all-in" })}>All-in</button>}
-        {actionTypes.includes("fold") && <button onClick={() => onAction({ type: "fold" })}>Fold</button>}
+        {actionTypes.includes("check") && <button disabled={disabled} onClick={() => onAction({ type: "check" })}>Check</button>}
+        {actionTypes.includes("call") && <button disabled={disabled} onClick={() => onAction({ type: "call" })}>Call {Math.min(callAmount, player.chips)}</button>}
+        {actionTypes.includes("all-in") && <button disabled={disabled} onClick={() => onAction({ type: "all-in" })}>All-in</button>}
+        {actionTypes.includes("fold") && <button disabled={disabled} onClick={() => onAction({ type: "fold" })}>Fold</button>}
       </div>
 
       {mode !== "none" && (
@@ -206,21 +272,21 @@ function HumanActionControls({ game, player, legalActions, onAction }: { game: G
           </div>
 
           <div className="stepButtons">
-            <button onClick={() => changeBy(-largeStep)}>--</button>
-            <button onClick={() => changeBy(-smallStep)}>-</button>
-            <button onClick={() => changeBy(smallStep)}>+</button>
-            <button onClick={() => changeBy(largeStep)}>++</button>
+            <button disabled={disabled} onClick={() => changeBy(-largeStep)}>--</button>
+            <button disabled={disabled} onClick={() => changeBy(-smallStep)}>-</button>
+            <button disabled={disabled} onClick={() => changeBy(smallStep)}>+</button>
+            <button disabled={disabled} onClick={() => changeBy(largeStep)}>++</button>
           </div>
 
           <div className="presetButtons">
-            <button onClick={() => setPreset("min")}>Min</button>
-            <button onClick={() => setPreset("half-pot")}>1/2 Pot</button>
-            <button onClick={() => setPreset("pot")}>Pot</button>
-            <button onClick={() => setPreset("all-in")}>All-in</button>
+            <button disabled={disabled} onClick={() => setPreset("min")}>Min</button>
+            <button disabled={disabled} onClick={() => setPreset("half-pot")}>1/2 Pot</button>
+            <button disabled={disabled} onClick={() => setPreset("pot")}>Pot</button>
+            <button disabled={disabled} onClick={() => setPreset("all-in")}>All-in</button>
           </div>
 
           {!validation.valid && validation.reason && <p className="errorText">{validation.reason}</p>}
-          <button className="primaryAction" disabled={!validation.valid} onClick={submitWager}>
+          <button className="primaryAction" disabled={disabled || !validation.valid} onClick={submitWager}>
             {mode === "bet" ? "Bet" : "Raise"}
           </button>
         </div>
@@ -243,6 +309,14 @@ function allInLabel(kind: AllInActionKind): string {
   if (kind === "all-in-under-raise") return "Under Raise All-in";
   if (kind === "all-in-full-raise") return "Full Raise All-in";
   return "";
+}
+
+function actionStatusLabel(currentPlayer: Player | null, game: GameState, thinkingPlayerId: string | null): string {
+  if (currentPlayer) {
+    return currentPlayer.id === thinkingPlayerId ? `${currentPlayer.name} thinking...` : `${currentPlayer.name}'s turn`;
+  }
+  if (game.stage === "gameOver") return "Game over";
+  return "Hand complete";
 }
 
 function PotBreakdown({ game }: { game: GameState }) {
