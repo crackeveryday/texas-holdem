@@ -160,27 +160,29 @@ export default function App() {
         </div>
       </header>
 
-      <PokerTable game={game} thinkingPlayerId={thinkingPlayerId} boardReveal={boardReveal} />
+      <div className="playLayout">
+        <PokerTable game={game} thinkingPlayerId={thinkingPlayerId} boardReveal={boardReveal} />
 
-      <section className="controls">
-        <div className="actionSummary">
-          <h2>Action</h2>
-          <p>{actionStatusLabel(currentPlayer, game, thinkingPlayerId)}</p>
-          {humanBest && <p>Your best hand: {humanBest.name}</p>}
-          <RoundResultPanel result={game.roundResult} />
-        </div>
-        <div className="buttons">
-          {game.stage === "gameOver" ? (
-            <button onClick={() => setGame(restartGame())}>Restart</button>
-          ) : game.currentPlayerIndex === null ? (
-            <button onClick={nextHand}>Next Hand</button>
-          ) : currentPlayer?.isHuman ? (
-            <ActionPanel game={game} player={currentPlayer} legalActions={legalActions} disabled={isCpuThinking} onAction={dispatch} />
-          ) : (
-            <span className="waiting">{currentPlayer?.name ?? "CPU"} thinking...</span>
-          )}
-        </div>
-      </section>
+        <section className="controls">
+          <div className="actionSummary">
+            <h2>Action</h2>
+            <p>{actionStatusLabel(currentPlayer, game, thinkingPlayerId)}</p>
+            {humanBest && <p>Your best hand: {humanBest.name}</p>}
+            <RoundResultPanel result={game.roundResult} />
+          </div>
+          <div className="buttons">
+            {game.stage === "gameOver" ? (
+              <button onClick={() => setGame(restartGame())}>Restart</button>
+            ) : game.currentPlayerIndex === null ? (
+              <button onClick={nextHand}>Next Hand</button>
+            ) : currentPlayer?.isHuman ? (
+              <ActionPanel game={game} player={currentPlayer} legalActions={legalActions} disabled={isCpuThinking} onAction={dispatch} />
+            ) : (
+              <span className="waiting">{currentPlayer?.name ?? "CPU"} thinking...</span>
+            )}
+          </div>
+        </section>
+      </div>
 
       <section className="log">
         <h2>Game Log</h2>
@@ -553,7 +555,6 @@ function PlayerSeat({
       <div className="playerHead">
         <div>
           <h3>{player.name}</h3>
-          {isThinking && <p className="thinkingText">{player.name} thinking...</p>}
         </div>
         <div className="badges">
           {badges.map((badge) => (
