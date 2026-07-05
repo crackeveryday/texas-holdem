@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyPlayerAction, createInitialGame, getLegalActions, type GameState } from "../lib/game";
+import { applyPlayerAction, createInitialGame, getLegalActions, MAX_RAISES_PER_ROUND, type GameState } from "../lib/game";
 
 function forceHumanTurn(state: GameState): GameState {
   return {
@@ -32,6 +32,14 @@ describe("game betting", () => {
     expect(next.players[0].chips).toBe(980);
     expect(next.players[0].committed).toBe(20);
     expect(next.pot).toBe(100);
+  });
+
+  it("hides raise actions after the round raise cap", () => {
+    const state = { ...forceHumanTurn(createInitialGame()), roundRaiseCount: MAX_RAISES_PER_ROUND };
+    const actions = getLegalActions(state, 0).map((action) => action.type);
+    expect(actions).not.toContain("raise");
+    expect(actions).not.toContain("all-in");
+    expect(actions).toContain("call");
   });
 
   it("awards the pot when everyone else folds", () => {

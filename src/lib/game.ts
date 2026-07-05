@@ -16,6 +16,7 @@ export interface Player {
   committed: number;
   roundBet: number;
   acted: boolean;
+  raisedThisRound: boolean;
 }
 
 export interface GameState {
@@ -33,6 +34,7 @@ export interface GameState {
   logs: string[];
   lastEvaluations: Record<string, HandEvaluation>;
   showdown: boolean;
+  roundRaiseCount: number;
 }
 
 export interface GameAction {
@@ -44,6 +46,7 @@ export const INITIAL_CHIPS = 1000;
 export const SMALL_BLIND = 10;
 export const BIG_BLIND = 20;
 export const BET_OPTIONS = [10, 25, 50];
+export const MAX_RAISES_PER_ROUND = 2;
 
 export function createInitialGame(): GameState {
   const players = Array.from({ length: 5 }, (_, index): Player => ({
@@ -56,6 +59,7 @@ export function createInitialGame(): GameState {
     committed: 0,
     roundBet: 0,
     acted: false,
+    raisedThisRound: false,
   }));
   return startHand({
     players,
@@ -72,6 +76,7 @@ export function createInitialGame(): GameState {
     logs: [],
     lastEvaluations: {},
     showdown: false,
+    roundRaiseCount: 0,
   });
 }
 
@@ -91,6 +96,7 @@ export function startHand(previous: GameState): GameState {
     committed: 0,
     roundBet: 0,
     acted: false,
+    raisedThisRound: false,
     status: player.chips > 0 ? ("Active" as const) : ("Eliminated" as const),
   }));
   let deck = shuffleDeck(createDeck());
@@ -126,6 +132,7 @@ export function startHand(previous: GameState): GameState {
     handNumber: previous.handNumber + 1,
     lastEvaluations: {},
     showdown: false,
+    roundRaiseCount: 0,
     logs: [
       `Hand ${previous.handNumber + 1} started. ${players[smallBlindIndex].name} posts SB ${SMALL_BLIND}, ${players[bigBlindIndex].name} posts BB ${BIG_BLIND}.`,
       ...previous.logs,
@@ -146,11 +153,17 @@ export function getLegalActions(state: GameState, playerIndex: number): GameActi
     }
   } else {
     actions.push({ type: "call" });
-    for (const amount of BET_OPTIONS) {
-      if (player.chips > toCall) actions.push({ type: "raise", amount });
+    if (state.roundRaiseCount < MAX_RAISES_PER_ROUND) {
+      for (const amount of BET_OPTIONS) {
+        if (player.chips > toCall) actions.push({ type: "raise", amount });
+      }
     }
   }
-  actions.push({ type: "all-in" }, { type: "fold" });
+  const allInWouldRaise = toCall > 0 && player.chips > toCall;
+  if (!(allInWouldRaise && state.roundRaiseCount >= MAX_RAISES_PER_ROUND)) {
+    actions.push({ type: "all-in" });
+  }
+  actions.push({ type: "fold" });
   return dedupeActions(actions, player.chips, toCall);
 }
 
@@ -160,6 +173,7 @@ export function applyPlayerAction(state: GameState, playerIndex: number, action:
   const player = players[playerIndex];
   const logs = [...state.logs];
   let currentBet = state.currentBet;
+  let roundRaiseCount = state.roundRaiseCount;
 
   if (!isActionable(player)) return state;
 
@@ -184,10 +198,15 @@ export function applyPlayerAction(state: GameState, playerIndex: number, action:
     player.acted = true;
     logs.unshift(`${player.name} ${player.status === "All-in" ? "bets all-in" : "bets"} ${paid}.`);
   } else if (action.type === "raise" && toCall > 0) {
+    if (roundRaiseCount >= MAX_RAISES_PER_ROUND) {
+      return state;
+    }
     const target = currentBet + (action.amount ?? 0);
     const paid = commitChips(player, target - player.roundBet);
     if (player.roundBet > currentBet) {
       currentBet = player.roundBet;
+      roundRaiseCount += 1;
+      player.raisedThisRound = true;
       resetOtherActors(players, playerIndex);
     }
     player.acted = true;
@@ -196,7 +215,14 @@ export function applyPlayerAction(state: GameState, playerIndex: number, action:
     const before = player.roundBet;
     const paid = commitChips(player, player.chips);
     if (player.roundBet > currentBet) {
+      if (toCall > 0 && roundRaiseCount >= MAX_RAISES_PER_ROUND) {
+        return state;
+      }
       currentBet = player.roundBet;
+      if (toCall > 0) {
+        roundRaiseCount += 1;
+        player.raisedThisRound = true;
+      }
       resetOtherActors(players, playerIndex);
     }
     player.acted = true;
@@ -207,6 +233,7 @@ export function applyPlayerAction(state: GameState, playerIndex: number, action:
     ...state,
     players,
     currentBet,
+    roundRaiseCount,
     pot: calculatePot(players),
     logs,
   });
@@ -235,7 +262,7 @@ function continueGame(state: GameState): GameState {
 }
 
 function advanceStage(state: GameState): GameState {
-  const players = state.players.map((player) => ({ ...player, roundBet: 0, acted: !isActionable(player) }));
+  const players = state.players.map((player) => ({ ...player, roundBet: 0, acted: !isActionable(player), raisedThisRound: false }));
   let deck = state.deck;
   let communityCards = state.communityCards;
   let stage: Stage = state.stage;
@@ -264,7 +291,7 @@ function advanceStage(state: GameState): GameState {
   }
 
   const next = nextActionableIndex(players, state.dealerIndex);
-  return continueGame({ ...state, players, deck, communityCards, stage, currentBet: 0, currentPlayerIndex: next, logs });
+  return continueGame({ ...state, players, deck, communityCards, stage, currentBet: 0, currentPlayerIndex: next, roundRaiseCount: 0, logs });
 }
 
 function showdown(state: GameState): GameState {
