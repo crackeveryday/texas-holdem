@@ -166,9 +166,8 @@ export default function App() {
         <section className="controls">
           <div className="actionSummary">
             <h2>Action</h2>
-            <p>{actionStatusLabel(currentPlayer, game, thinkingPlayerId)}</p>
-            {humanBest && <p>Your best hand: {humanBest.name}</p>}
-            <RoundResultPanel result={game.roundResult} />
+            <p className="actionStatus">{actionStatusLabel(currentPlayer, game, thinkingPlayerId)}</p>
+            <p className="actionBestHand" aria-hidden={!humanBest}>{humanBest ? `Your best hand: ${humanBest.name}` : ""}</p>
           </div>
           <div className="buttons">
             {game.stage === "gameOver" ? (
@@ -181,6 +180,7 @@ export default function App() {
               <span className="waiting">{currentPlayer?.name ?? "CPU"} thinking...</span>
             )}
           </div>
+          <RoundResultPanel result={game.roundResult} />
         </section>
       </div>
 
@@ -321,10 +321,23 @@ function ActionPanel({
   return (
     <div className="actionPanel">
       <div className="quickActions">
-        {actionTypes.includes("check") && <button className="actionButton" disabled={disabled} onClick={() => onAction({ type: "check" })}>Check</button>}
-        {actionTypes.includes("call") && <button className="actionButton" disabled={disabled} onClick={() => onAction({ type: "call" })}>Call {Math.min(callAmount, player.chips)}</button>}
-        {actionTypes.includes("all-in") && <button className="actionButton allInAction" disabled={disabled} onClick={() => onAction({ type: "all-in" })}>All-in</button>}
-        {actionTypes.includes("fold") && <button className="actionButton dangerAction" disabled={disabled} onClick={() => onAction({ type: "fold" })}>Fold</button>}
+        {actionTypes.includes("check") ? (
+          <button className="actionButton" disabled={disabled} onClick={() => onAction({ type: "check" })}>Check</button>
+        ) : actionTypes.includes("call") ? (
+          <button className="actionButton" disabled={disabled} onClick={() => onAction({ type: "call" })}>Call {Math.min(callAmount, player.chips)}</button>
+        ) : (
+          <span className="actionButton actionSlotPlaceholder" aria-hidden="true" />
+        )}
+        {actionTypes.includes("all-in") ? (
+          <button className="actionButton allInAction" disabled={disabled} onClick={() => onAction({ type: "all-in" })}>All-in</button>
+        ) : (
+          <span className="actionButton actionSlotPlaceholder" aria-hidden="true" />
+        )}
+        {actionTypes.includes("fold") ? (
+          <button className="actionButton dangerAction" disabled={disabled} onClick={() => onAction({ type: "fold" })}>Fold</button>
+        ) : (
+          <span className="actionButton actionSlotPlaceholder" aria-hidden="true" />
+        )}
       </div>
 
       {mode !== "none" && (

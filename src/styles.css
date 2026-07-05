@@ -540,6 +540,15 @@ dd {
   min-width: 0;
 }
 
+.actionStatus,
+.actionBestHand {
+  line-height: 1.25;
+  min-height: 1.25em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .roundResult {
   background: #17201a;
   border: 1px solid rgba(23, 32, 26, 0.2);
@@ -547,7 +556,7 @@ dd {
   color: #fffdf7;
   display: grid;
   gap: 10px;
-  margin-top: 6px;
+  margin-top: 0;
   padding: 12px;
   width: 100%;
 }
@@ -702,6 +711,12 @@ dd {
 
 .actionButton {
   min-width: 0;
+}
+
+.actionSlotPlaceholder {
+  min-height: 42px;
+  pointer-events: none;
+  visibility: hidden;
 }
 
 .dangerAction {
@@ -1256,7 +1271,7 @@ dd {
   }
 
   .quickActions {
-    grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .stepButtons,
