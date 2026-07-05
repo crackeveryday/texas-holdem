@@ -193,6 +193,26 @@ export default function App() {
   );
 }
 
+function CpuPlayerList({ game, thinkingPlayerId }: { game: GameState; thinkingPlayerId: string | null }) {
+  return (
+    <section className="mobileCpuPlayers" aria-label="CPU players">
+      {game.players.map((player, index) => (
+        player.isHuman ? null : (
+          <CpuSummarySeat
+            key={`mobile-${player.id}`}
+            player={player}
+            index={index}
+            game={game}
+            isCurrent={game.currentPlayerIndex === index}
+            isThinking={thinkingPlayerId === player.id}
+            reveal={game.showdown || game.stage === "gameOver"}
+          />
+        )
+      ))}
+    </section>
+  );
+}
+
 function ActionPanel({
   game,
   player,
@@ -331,6 +351,8 @@ function PokerTable({ game, thinkingPlayerId, boardReveal }: { game: GameState; 
   return (
     <section className="table" aria-label="Poker table">
       <div className="tableFelt">
+        <CpuPlayerList game={game} thinkingPlayerId={thinkingPlayerId} />
+
         {game.players.map((player, index) => (
           <PlayerSeat
             key={player.id}
@@ -349,6 +371,61 @@ function PokerTable({ game, thinkingPlayerId, boardReveal }: { game: GameState; 
         </div>
       </div>
     </section>
+  );
+}
+
+function CpuSummarySeat({
+  player,
+  index,
+  game,
+  isCurrent,
+  isThinking,
+  reveal,
+}: {
+  player: Player;
+  index: number;
+  game: GameState;
+  isCurrent: boolean;
+  isThinking: boolean;
+  reveal: boolean;
+}) {
+  const badges = [
+    game.dealerIndex === index ? "D" : null,
+    game.smallBlindIndex === index ? "SB" : null,
+    game.bigBlindIndex === index ? "BB" : null,
+  ].filter(Boolean);
+  const className = [
+    "cpuSummarySeat",
+    isCurrent ? "current" : "",
+    isThinking ? "thinking" : "",
+    `status-${player.status.toLowerCase().replace("-", "")}`,
+  ].filter(Boolean).join(" ");
+  const showCards = reveal && player.status !== "Eliminated";
+
+  return (
+    <article className={className}>
+      <div className="cpuSummaryMain">
+        <span className="cpuSeatOrder">#{index + 1}</span>
+        <strong>{player.name}</strong>
+        <StatusBadge status={player.status} isThinking={isThinking} />
+      </div>
+      <div className="cpuSummaryBadges">
+        {badges.map((badge) => (
+          <span className="positionBadge" key={badge}>{badge}</span>
+        ))}
+      </div>
+      <div className="cpuSummaryStats">
+        <span>Chips <strong>{player.chips}</strong></span>
+        <span>Bet <strong>{player.roundBet}</strong></span>
+      </div>
+      {showCards && (
+        <div className="cards cpuSummaryCards">
+          {player.holeCards.map((card, cardIndex) => (
+            <CardView key={`${cardDisplayKey(card)}-${cardIndex}`} card={card} muted={player.status === "Folded"} />
+          ))}
+        </div>
+      )}
+    </article>
   );
 }
 
@@ -416,7 +493,15 @@ function PlayerSeat({
     game.bigBlindIndex === index ? "BB" : null,
   ].filter(Boolean);
   const evaluation = game.lastEvaluations[player.id];
-  const seatClass = `player seat-${index} ${player.isHuman ? "human" : ""} ${isCurrent ? "current" : ""} ${isThinking ? "thinking" : ""} status-${player.status.toLowerCase().replace("-", "")}`;
+  const seatClass = [
+    "player",
+    `seat-${index}`,
+    player.isHuman ? "human" : "",
+    reveal ? "cards-revealed" : "",
+    isCurrent ? "current" : "",
+    isThinking ? "thinking" : "",
+    `status-${player.status.toLowerCase().replace("-", "")}`,
+  ].filter(Boolean).join(" ");
   const showCards = player.status !== "Eliminated";
 
   return (
@@ -442,20 +527,20 @@ function PlayerSeat({
             ))
           : <span className="noCards">No cards</span>}
       </div>
-      <dl>
-        <div>
+      <dl className="playerStats">
+        <div className="playerStat playerStatChips">
           <dt>Chips</dt>
           <dd>{player.chips}</dd>
         </div>
-        <div>
+        <div className="playerStat playerStatCommitted">
           <dt>Committed</dt>
           <dd>{player.committed}</dd>
         </div>
-        <div>
+        <div className="playerStat playerStatBet">
           <dt>Round Bet</dt>
           <dd>{player.roundBet}</dd>
         </div>
-        <div>
+        <div className="playerStat playerStatStatus">
           <dt>Status</dt>
           <dd>{player.status}</dd>
         </div>
@@ -507,12 +592,12 @@ function CardView({
 
   return (
     <span className={`${classes} face ${suitColorClass}`} style={style} aria-label={`${rank} of ${card.suit}`}>
-      <span className="cardCorner">
+      <span className="card-corner top-left">
         <strong>{rank}</strong>
         <span>{suit}</span>
       </span>
-      <span className="cardSuit">{suit}</span>
-      <span className="cardCorner cardCornerBottom">
+      <span className="card-center-suit">{suit}</span>
+      <span className="card-corner bottom-right">
         <strong>{rank}</strong>
         <span>{suit}</span>
       </span>

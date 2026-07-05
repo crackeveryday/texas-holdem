@@ -343,6 +343,7 @@ h3 {
   display: inline-flex;
   flex: 0 0 auto;
   height: 102px;
+  justify-content: center;
   overflow: hidden;
   position: relative;
   width: 73px;
@@ -360,7 +361,6 @@ h3 {
   box-shadow:
     inset 0 0 0 3px rgba(255, 255, 255, 0.68),
     0 7px 12px rgba(23, 32, 26, 0.18);
-  justify-content: center;
 }
 
 .card.back {
@@ -405,47 +405,55 @@ h3 {
   color: #17201a;
 }
 
-.cardCorner {
+.card-corner {
   align-items: center;
-  display: grid;
+  display: flex;
   font-size: 14px;
   gap: 0;
-  justify-items: center;
-  left: 7px;
   line-height: 1;
   position: absolute;
+}
+
+.card-corner.top-left {
+  left: 7px;
   top: 6px;
 }
 
-.cardCorner strong {
+.card-corner.bottom-right {
+  bottom: 6px;
+  right: 7px;
+  transform: rotate(180deg);
+}
+
+.card-corner strong {
   font-size: 18px;
 }
 
-.holeCards .cardCorner {
+.holeCards .card-corner {
   font-size: 11px;
+}
+
+.holeCards .card-corner.top-left {
   left: 6px;
   top: 5px;
 }
 
-.holeCards .cardCorner strong {
+.holeCards .card-corner.bottom-right {
+  bottom: 5px;
+  right: 6px;
+}
+
+.holeCards .card-corner strong {
   font-size: 15px;
 }
 
-.cardCornerBottom {
-  bottom: 6px;
-  left: auto;
-  right: 7px;
-  top: auto;
-  transform: rotate(180deg);
-}
-
-.cardSuit {
+.card-center-suit {
   align-self: center;
   font-size: 42px;
   line-height: 1;
 }
 
-.holeCards .cardSuit {
+.holeCards .card-center-suit {
   font-size: 31px;
 }
 
@@ -495,6 +503,10 @@ dd {
   display: flex;
   gap: 24px;
   justify-content: space-between;
+}
+
+.mobileCpuPlayers {
+  display: none;
 }
 
 .actionPanel {
@@ -727,33 +739,364 @@ dd {
     padding: 14px;
   }
 
+  .topbar {
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  h1 {
+    font-size: 26px;
+  }
+
+  h2 {
+    font-size: 16px;
+  }
+
   .table {
+    border-radius: 18px;
     padding: 8px;
   }
 
   .tableFelt {
     grid-template-areas:
-      "cpu1"
-      "cpu2"
-      "cpu3"
-      "cpu4"
+      "cpuSummary"
       "center"
       "human";
     grid-template-columns: 1fr;
-    padding: 12px;
+    gap: 7px;
+    padding: 10px;
+  }
+
+  .tableFelt > .player:not(.human) {
+    display: none;
+  }
+
+  .tableCenter {
+    gap: 7px;
+  }
+
+  .board {
+    gap: 8px;
+  }
+
+  .boardHeader {
+    gap: 6px;
+  }
+
+  .cards {
+    gap: 6px;
+  }
+
+  .boardCards {
+    min-height: 72px;
+  }
+
+  .potDisplay {
+    gap: 4px;
+  }
+
+  .potDisplay div {
+    font-size: 12px;
+    gap: 5px;
+    padding: 6px 8px;
+  }
+
+  .player {
+    padding: 8px;
+  }
+
+  .player.human {
+    align-self: stretch;
+  }
+
+  .player.human .playerHead {
+    margin-bottom: 6px;
+  }
+
+  .player.human .playerStatusRow {
+    margin-bottom: 6px;
+  }
+
+  .player.human .holeCards {
+    min-height: 64px;
+  }
+
+  .player.human .playerStats {
+    gap: 6px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin-top: 8px;
+  }
+
+  .player.human .playerStat {
+    display: block;
+  }
+
+  .player.human dt {
+    font-size: 12px;
+  }
+
+  .player.human dd {
+    font-size: 15px;
+  }
+
+  .player.human .playerStatCommitted {
+    display: none;
+  }
+
+  .player:not(.human) {
+    align-self: stretch;
+  }
+
+  .player:not(.human) .thinkingText {
+    display: none;
+  }
+
+  .player:not(.human) .holeCards {
+    min-height: 0;
+  }
+
+  .mobileCpuPlayers {
+    display: grid;
+    gap: 6px;
+    grid-area: cpuSummary;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .cpuSummarySeat {
+    background: rgba(255, 253, 247, 0.94);
+    border: 2px solid rgba(255, 253, 247, 0.16);
+    border-radius: 8px;
+    color: #17201a;
+    display: grid;
+    gap: 5px;
+    min-width: 0;
+    padding: 7px;
+  }
+
+  .cpuSummarySeat.current {
+    border-color: #f7d154;
+    box-shadow: 0 0 0 2px rgba(247, 209, 84, 0.28);
+  }
+
+  .cpuSummarySeat.thinking {
+    background: #fff8df;
+  }
+
+  .cpuSummaryMain {
+    align-items: center;
+    display: grid;
+    gap: 4px;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .cpuSummaryMain strong {
+    font-size: 12px;
+    line-height: 1.1;
+    min-width: 0;
+  }
+
+  .cpuSeatOrder {
+    background: #17201a;
+    border-radius: 999px;
+    color: #fffdf7;
+    font-size: 10px;
+    font-weight: 900;
+    line-height: 1;
+    padding: 4px 5px;
+  }
+
+  .cpuSummaryBadges,
+  .cpuSummaryStats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .cpuSummaryStats {
+    color: #59635c;
+    font-size: 11px;
+    font-weight: 800;
+  }
+
+  .cpuSummaryStats strong {
+    color: #17201a;
+    font-size: 12px;
+  }
+
+  .cpuSummaryCards {
+    gap: 4px;
+  }
+
+  .cpuSummaryCards .card {
+    height: 48px;
+    width: 34px;
+  }
+
+  .cpuSummaryCards .card-corner {
+    font-size: 7px;
+  }
+
+  .cpuSummaryCards .card-corner.top-left {
+    left: 4px;
+    top: 4px;
+  }
+
+  .cpuSummaryCards .card-corner.bottom-right {
+    bottom: 4px;
+    right: 4px;
+  }
+
+  .cpuSummaryCards .card-corner strong {
+    font-size: 9px;
+  }
+
+  .cpuSummaryCards .card-center-suit {
+    font-size: 18px;
+  }
+
+  .statusBadge {
+    font-size: 10px;
+    padding: 4px 6px;
+  }
+
+  .positionBadge {
+    font-size: 10px;
+    min-width: 26px;
+    padding: 4px 6px;
   }
 
   .card {
-    height: 88px;
-    width: 63px;
+    border-radius: 6px;
+    height: 70px;
+    width: 50px;
   }
 
   .holeCards .card {
-    height: 76px;
-    width: 54px;
+    height: 64px;
+    width: 46px;
+  }
+
+  .player:not(.human) .holeCards .card {
+    height: 56px;
+    width: 40px;
+  }
+
+  .card-corner {
+    font-size: 9px;
+  }
+
+  .card-corner.top-left {
+    left: 5px;
+    top: 5px;
+  }
+
+  .card-corner.bottom-right {
+    bottom: 5px;
+    right: 5px;
+  }
+
+  .card-corner strong {
+    font-size: 12px;
+  }
+
+  .holeCards .card-corner {
+    font-size: 8px;
+  }
+
+  .holeCards .card-corner strong {
+    font-size: 11px;
+  }
+
+  .card-center-suit {
+    font-size: 29px;
+  }
+
+  .holeCards .card-center-suit {
+    font-size: 25px;
+  }
+
+  .player:not(.human) .holeCards .card-center-suit {
+    font-size: 22px;
+  }
+
+  .controls,
+  .log {
+    margin-top: 12px;
+    padding: 12px;
+  }
+
+  .controls {
+    gap: 12px;
+  }
+
+  .actionPanel,
+  .wagerControl {
+    gap: 8px;
+  }
+
+  .wagerControl {
+    padding: 10px;
+  }
+
+  .quickActions,
+  .stepButtons,
+  .presetButtons {
+    display: grid;
+  }
+
+  .quickActions {
+    grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  }
+
+  .stepButtons,
+  .presetButtons {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .actionButton,
+  .presetButtons button,
+  .stepButtons button {
+    min-width: 0;
+    padding: 0 10px;
   }
 
   .wagerStats {
-    grid-template-columns: 1fr;
+    gap: 6px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .wagerStats div {
+    display: block;
+    font-size: 12px;
+    padding: 6px 7px;
+  }
+
+  .wagerStats span {
+    display: block;
+    font-size: 10px;
+    white-space: nowrap;
+  }
+
+  .wagerStats strong {
+    display: block;
+    font-size: 13px;
+    margin-top: 2px;
+  }
+
+  .amountDisplay {
+    gap: 6px;
+    padding: 10px;
+  }
+
+  .amountDisplay strong {
+    font-size: 28px;
+  }
+
+  .primaryAction {
+    width: 100%;
+  }
+
+  .log ol {
+    max-height: 120px;
   }
 }
